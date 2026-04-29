@@ -388,13 +388,13 @@ def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer,pm
 ##################################################################################################################
 # Main script
 # Load the custom dictionary
-if ROOT.gSystem.Load("/net/cms18/cms18r0/cms26r0/zheng/barsim/milliQanSim/build/libMilliQanCore.so") < 0:
+if ROOT.gSystem.Load("/homes/dgimani/milliQanSim/build/libMilliQanCore.so") < 0:
     raise Exception("Failed to load custom dictionary.")
 
 # Open the input ROOT file specified in the first argument
 #filename = "/net/cms26/cms26r0/zheng/barSimulation/barWithPhotonUpdate/BARcosmic" + sys.argv[1] + "/MilliQan.root"
 filename = sys.argv[1] + sys.argv[2] + ".root" # should be file location + file name
-outname = "BeamsimFlat_" + sys.argv[2] + ".root"
+outname =  sys.argv[1] + "flattened_output.root"
 
 
 #get the file number
@@ -486,4 +486,4 @@ for i in range(n_entries):
 output_file.Write()
 output_file.Close()
 
-#print("Finished file " + sys.argv[2])
+print("Finished file " + sys.argv[2])

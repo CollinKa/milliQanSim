@@ -6,17 +6,24 @@
 #include <fstream>
 
 void extract_values() {
-  TString mode="dy";
-  TString path = "/net/cms26/cms26r0/hmei/milliqan/muons/05252023/"+mode+"/postsim_v1_save2m/";
-  TString outputFile = "output_"+mode+"_muons.txt";
+  //TString mode="dy";
+  TString mode="eta";
+  TString mass="m_0p1";
+  //TString path = "/net/cms26/cms26r0/hmei/milliqan/muons/05252023/"+mode+"/postsim_v1_save2m/";
+  TString inpath = "/net/cms26/cms26r0/dgimani/milliq_mcgen/propagated/" + mass + "/" + mode + "/";
+
+  //TString/ outputFile = "output_"+mode+"_muons.txt";
+  TString outpath = "/homes/dgimani/milliQanSim/inputData/Run3_mcp_inputs/";
+  TString outputFile = outpath+mass+"/"+mode+"/output_mcp_"+mass+"_"+mode+".txt";
 
   std::ofstream file(outputFile);
   int nFiles=0;
   int entryTot=0;
-  for (int i = 1; i <= 100; i++) { // change if the number of files you want to loop over changes
-    TString fileName = Form("output_%d.root", i);
-    std::cout << "Opening file: " << fileName << std::endl;
-    TFile *f = TFile::Open(path + fileName);
+  for (int i = 1; i <= 48; i++) { // change if the number of files you want to loop over changes
+    TString fileName = Form("%spropagated_output_%d.root", inpath.Data(),i);
+    //TString fileName = "propagated_output_1.root";
+    std::cout << "Opening file: " << inpath + fileName << std::endl;
+    TFile *f = TFile::Open(fileName);
     if (!f) continue;
     if (f->IsZombie()) {f->Close(); std::cout << "is zombie!" << std::endl; continue;}
     if ( !f->Get("Events")) {std::cout << "file is null! No event content found" << std::endl; continue;}

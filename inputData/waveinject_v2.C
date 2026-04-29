@@ -7,10 +7,8 @@
 #include <fstream>
 #include "TMath.h"
 #include "TChain.h"
-#include "../include/mqROOTEvent.hh"
-#include "../include/mqPMTRHit.hh"
-//#include "/net/cms18/cms18r0/cms26r0/zheng/barsim/milliQanSim/include/mqROOTEvent.hh"
-//#include "/net/cms18/cms18r0/cms26r0/zheng/barsim/milliQanSim/include/mqPMTRHit.hh"
+#include "/homes/dgimani/milliQanSim/include/mqROOTEvent.hh"
+#include "/homes/dgimani/milliQanSim/include/mqPMTRHit.hh"
 //#include "milliQanSim/include/mqROOTEvent.hh"
 //#include "milliQanSim/include/mqPMTRHit.hh"
 #include "TGraph.h"
@@ -24,12 +22,9 @@
 #include "TMultiGraph.h"
 #include <vector>
 #include <map>
+#include <algorithm>
+R__LOAD_LIBRARY(/homes/dgimani/milliQanSim/build/libMilliQanCore.so)
 #include "TSystem.h"
-//R__LOAD_LIBRARY(/homes/tianjiad/milliQanSim/build/libBenchCore.so)
-//R__LOAD_LIBRARY(/net/cms26/cms26r0/zheng/barsim/milliQanSim/build/libMilliQanCore.so)
-R__LOAD_LIBRARY(milliQanSim/include/libMilliQanCore.so)
-//R__LOAD_LIBRARY(../include/libMilliQanCore.so)
-
 using namespace std;
 
 
@@ -117,10 +112,10 @@ std::vector<double> maxValues = {
 
    TRandom3 randGen(2004);
    Long64_t nentries = rootEvents.GetEntries();
-   std::cout << "Entries: " << nentries << std::endl;
+   //std::cout << "Entries: " << nentries << std::endl;
 
    for (Long64_t i = 0; i < nentries; i++) {
-      if (i % (nentries / 100) == 0) std::cout << "Processing Event " << i << "..." << std::endl;
+      if (i % (nentries / 100) == 0) //std::cout << "Processing Event " << i << "..." << std::endl;
       rootEvents.GetEntry(i);
       memset(waveform, 0, sizeof(waveform));
 

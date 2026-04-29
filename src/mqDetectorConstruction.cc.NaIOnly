@@ -107,7 +107,7 @@ G4VPhysicalVolume* mqDetectorConstruction::SetupGeometry() {
 				"G4_AIR");
 
 	const G4int nEntriesAir = 2;
-	G4double photonEnergyAir[nEntriesAir]={ 6.3 * eV,1.5 * eV};
+	G4double photonEnergyAir[nEntriesAir]={1.5 * eV,6.3 * eV};  //{ 6.3 * eV,1.5 * eV};
 	G4double Air_RIND[nEntriesAir];
 
 	for (int i = 0; i < nEntriesAir; i++) {

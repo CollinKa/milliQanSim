@@ -20,7 +20,8 @@
 //#include "G4VPhysicalVolume.hh"
 #include <vector>
 
-class G4VTouchable;
+//class G4VTouchable;  #OLD G4.9
+#include "G4VTouchable.hh"
 
 class mqPMTHit : public G4VHit
 {
