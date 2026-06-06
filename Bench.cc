@@ -14,6 +14,7 @@
 //#include "MilliQPhysicsList.hh"
 #include "G4RunManager.hh"
 #include "G4UImanager.hh"
+#include "G4UIExecutive.hh"
 #include "G4UIterminal.hh"
 #include "G4UItcsh.hh"
 #include "Randomize.hh"
@@ -123,12 +124,7 @@ int main(int argc, char** argv) {
 		G4cout << "MilliQan> Enter interactive mode." << G4endl;
 		// Define (G)UI terminal for interactive mode
 		// G4UIterminal is a (dumb) terminal
-		G4UIsession * session = 0;
-#ifdef G4UI_USE_TCSH
-		session = new G4UIterminal(new G4UItcsh);
-#else
-		session = new G4UIterminal();
-#endif
+		G4UIExecutive * session = new G4UIExecutive(argc, argv, "qt");
 		// 		UI->ApplyCommand("/control/execute run25.mac");
 		session->SessionStart();
 		delete session;
@@ -147,12 +143,7 @@ int main(int argc, char** argv) {
 		G4cout << "MilliQan> Enter batch mode." << G4endl;
 		if ((strcmp(argv[2], "-GUI") == 0) || (strcmp(argv[1], "-GUI") == 0)) {
 			//Graphical batch mode
-			G4UIsession * session = 0;
-#ifdef G4UI_USE_TCSH
-			session = new G4UIterminal(new G4UItcsh);
-#else
-			session = new G4UIterminal();
-#endif
+			G4UIExecutive * session = new G4UIExecutive(argc, argv, "qt");
 			G4String command = "/control/execute ";
 			G4String fileName = "";
 			//if GUI is the 2nd argument then the filename is the 1st ...
