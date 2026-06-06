@@ -1,7 +1,7 @@
 #!/bin/bash
 if [ ! -d "build" ]; then
     mkdir build
-    cp inputData/config -r build
+    cp -r inputData/config build
 fi
 
 ### these aren't used for now, so commenting out
