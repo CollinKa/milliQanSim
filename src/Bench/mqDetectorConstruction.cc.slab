@@ -1,5 +1,11 @@
 // created 22-04-2019
-// author: Ryan Schmitz (UCSB)
+// orginal author: Ryan Schmitz (UCSB)
+//
+// modified 6-6-2026 by Collin Zheng
+// reason: for taking away "while(!ReadEJ200.eof())...".  while(!file.eof()) is a common C++ bug. EOF only becomes true after a read fails, so the loop can run one extra time with stale or invalid values. 
+// this change does not intentionally change the physics values. It just makes reading EJ200ScintSpectrum.txt and PMT_R878_QE_orig.txt safer
+
+
 
 //==============================================================================
 #include "mqDetectorConstruction.hh"
@@ -1787,8 +1793,7 @@ G4MaterialPropertiesTable* mptPlScin = new G4MaterialPropertiesTable();
 	G4cout << "mqOpticalFilePath is: " << mqOpticalFilePath << G4endl;
 	ReadEJ200.open(mqOpticalFilePath+"EJ200ScintSpectrum.txt");
 	if(ReadEJ200.is_open()){
-	while(!ReadEJ200.eof()){
-	ReadEJ200 >> pWavelength >> pSEff;
+	while(ScintEntry < nEntries && ReadEJ200 >> pWavelength >> pSEff){
 	pEnergy = (1240/pWavelength)*eV;
 	photonEnergy[ScintEntry] = pEnergy;
 	EJ200_SCINT[ScintEntry] = pSEff;
@@ -1841,8 +1846,7 @@ G4MaterialPropertiesTable* mqDetectorConstruction::SetOpticalPropertiesOfPMT(){
 	G4double pQEff;
 	ReadPMTQEff.open(mqOpticalFilePath+"PMT_R878_QE_orig.txt");
 	if(ReadPMTQEff.is_open()){
-	while(!ReadPMTQEff.eof()){
-	ReadPMTQEff >> pWavelength >> pQEff;
+	while(PMTEntry < nEntriesPMT && ReadPMTQEff >> pWavelength >> pQEff){
 	pQEff=1;
 	pEnergy = (1240/pWavelength)*eV;
 	photonEnergyPMT[PMTEntry] = pEnergy;
@@ -1936,6 +1940,4 @@ void mqDetectorConstruction::SetDefaults(){
 
   updated=true;
 }
-
-
 
