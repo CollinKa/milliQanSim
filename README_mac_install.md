@@ -1,0 +1,300 @@
+# MilliQanSim on macOS Apple Silicon with Geant4 Qt
+
+This guide documents the working setup for running the `Bench` target of
+`milliQanSim` on an Apple Silicon Mac with a Qt Geant4 visualizer.
+
+Verified local setup:
+
+- macOS on Apple Silicon
+- Conda environment: `milliqan-sim`
+- ROOT from conda-forge
+- Geant4 10.7.4 built from source with Qt support
+- Qt OpenGL viewer: `OGLSQt`
+
+Use Geant4 10.7.4 for this workflow. This guide does not cover the non-Qt or
+X11-only viewer setup.
+
+## 1. Create the conda environment
+
+If the environment does not exist yet, create it from conda-forge:
+
+```bash
+conda create -n milliqan-sim -c conda-forge \
+  python=3.11 \
+  root \
+  cmake \
+  ninja \
+  boost \
+  qt \
+  compilers \
+  c-compiler \
+  cxx-compiler
+```
+
+Activate it:
+
+```bash
+conda activate milliqan-sim
+```
+
+If `conda activate` is being run from a non-interactive shell or a script and
+fails with `conda: command not found` or `CondaError: Run 'conda init' before
+'conda activate'`, initialize conda in that shell first:
+
+```bash
+source /opt/miniconda3/etc/profile.d/conda.sh
+conda activate milliqan-sim
+```
+
+In a normal terminal where `conda init` has already been set up, the `source`
+line is usually not needed.
+
+To check the important packages:
+
+```bash
+conda list | grep -E '^(root|cmake|ninja|qt|qt-main|boost|compilers|c-compiler|cxx-compiler|clang_osx-arm64|clangxx_osx-arm64|zlib)\s'
+```
+
+The verified environment had packages like:
+
+```text
+root              6.38.04
+cmake            4.2.3
+ninja            1.13.2
+qt               5.15.15
+qt-main          5.15.15
+boost            1.85.0
+clang_osx-arm64  18.1.8
+clangxx_osx-arm64 18.1.8
+```
+
+Exact patch versions can change, but the important point is that ROOT, Qt, CMake,
+Ninja, Boost, and the conda compiler wrappers are installed in the same
+environment.
+
+## 2. Download Geant4 10.7.4
+
+Build Geant4 from source. This example keeps the source and build tree in
+`/private/tmp` and installs Geant4 under `~/software`.
+
+```bash
+conda activate milliqan-sim
+
+cd /private/tmp
+curl -L -o geant4-v10.7.4.tar.gz \
+  https://gitlab.cern.ch/geant4/geant4/-/archive/v10.7.4/geant4-v10.7.4.tar.gz
+
+tar xzf geant4-v10.7.4.tar.gz
+```
+
+After extraction, the source directory should be:
+
+```text
+/private/tmp/geant4-v10.7.4
+```
+
+## 3. Build and install Geant4 with Qt
+
+Configure a clean Qt build:
+
+```bash
+conda activate milliqan-sim
+
+cd /private/tmp
+rm -rf geant4-v10.7.4-qt-build
+mkdir geant4-v10.7.4-qt-build
+cd geant4-v10.7.4-qt-build
+
+cmake -G Ninja \
+  -DCMAKE_INSTALL_PREFIX=$HOME/software/geant4-10.7.4-qt-install \
+  -DGEANT4_INSTALL_DATA=ON \
+  -DGEANT4_USE_QT=ON \
+  -DGEANT4_USE_OPENGL_X11=OFF \
+  -DGEANT4_USE_SYSTEM_ZLIB=ON \
+  -DGEANT4_BUILD_MULTITHREADED=ON \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  /private/tmp/geant4-v10.7.4
+```
+
+Then build and install:
+
+```bash
+ninja -j8
+ninja install
+```
+
+The install directory will be:
+
+```text
+$HOME/software/geant4-10.7.4-qt-install
+```
+
+This path is the installed Geant4 package. It contains the `bin/geant4.sh`
+environment script, headers, libraries, datasets, and CMake package files used by
+`milliQanSim`.
+
+Why these CMake options matter:
+
+- `GEANT4_USE_QT=ON` enables the Qt UI session and Qt visual drivers.
+- `GEANT4_USE_OPENGL_X11=OFF` avoids the XQuartz/GLX viewer path on macOS.
+- `GEANT4_USE_SYSTEM_ZLIB=ON` avoids building Geant4's bundled zlib, which caused
+  a macOS compile failure in this setup.
+- `GEANT4_INSTALL_DATA=ON` downloads and installs the Geant4 physics datasets.
+- `CMAKE_OSX_ARCHITECTURES=arm64` builds for Apple Silicon.
+
+## 4. Source the Qt Geant4 install
+
+Before building or running `milliQanSim`, source the Geant4 environment:
+
+```bash
+conda activate milliqan-sim
+
+cd $HOME/software/geant4-10.7.4-qt-install/bin
+source ./geant4.sh
+export Geant4_DIR=$HOME/software/geant4-10.7.4-qt-install/lib/Geant4-10.7.4
+```
+
+`geant4.sh` sets Geant4 runtime variables, including dataset paths and library
+paths. `Geant4_DIR` tells CMake exactly which Geant4 package to use when
+configuring `milliQanSim`.
+
+## 5. Build the Bench configuration
+
+From the project root:
+
+```bash
+cd /Users/haoliangzheng/Desktop/CERN/milliQanSim
+rm -f build/CMakeCache.txt
+rm -rf build/CMakeFiles
+bash benchSetupSlab.sh
+```
+
+The two `rm` commands clear CMake's previous configuration. This matters when
+switching from an old Geant4 install to the Qt Geant4 install, because
+`CMakeCache.txt` can keep stale paths and continue using the wrong Geant4 even
+after `Geant4_DIR` is changed.
+
+`benchSetupSlab.sh` copies the Bench/slab source variants into the active source
+paths, configures the build, compiles `Bench`, and runs the no-visualization
+benchmark macro.
+
+For the Qt viewer workflow, this local setup also adds a new macro file:
+
+```text
+/Users/haoliangzheng/Desktop/CERN/milliQanSim/runMac/visQt.mac
+```
+
+That file is not generated by CMake. It was added to open the `OGLSQt` viewer,
+draw the detector, and enable trajectory drawing for visual checks.
+
+If CMake has already been configured correctly and you only changed source code,
+you can rebuild with:
+
+```bash
+cd /Users/haoliangzheng/Desktop/CERN/milliQanSim/build
+make -j8 Bench
+```
+
+## 6. Start the Qt visual check
+
+Launch `Bench` from the build directory:
+
+```bash
+cd /Users/haoliangzheng/Desktop/CERN/milliQanSim/build
+./Bench
+```
+
+At the Geant4 prompt, or in the Qt window's bottom `Session:` input box, run:
+
+```text
+/control/macroPath /Users/haoliangzheng/Desktop/CERN/milliQanSim/runMac
+/control/execute visQt.mac
+```
+
+This should open a Qt window with a viewer tab named similar to:
+
+```text
+Viewer-0 (OpenGLStoredQt)
+```
+
+If the viewer opens but is blank:
+
+```text
+/vis/drawVolume
+/vis/viewer/zoomTo 3.5
+/vis/viewer/flush
+```
+
+To confirm that the Qt visual drivers are available:
+
+```text
+/vis/list
+```
+
+You should see entries including `OpenGLStoredQt`, `OGLSQt`, or equivalent Qt
+driver names.
+
+## 7. Draw events and trajectories
+
+The `visQt.mac` macro enables trajectory drawing and event accumulation. To
+generate a few events:
+
+```text
+/run/beamOn 10
+/vis/viewer/flush
+```
+
+If the detector appears but tracks do not:
+
+```text
+/tracking/storeTrajectory 1
+/vis/scene/add/trajectories
+/vis/scene/endOfEventAction accumulate 10
+/run/beamOn 10
+/vis/viewer/flush
+```
+
+For a simple visible GPS test:
+
+```text
+/gps/particle gamma
+/gps/energy 1 MeV
+/gps/position 0 0 0 cm
+/gps/direction 0 1 0
+/run/beamOn 1
+/vis/viewer/flush
+```
+
+## 8. Known warnings
+
+These warnings were seen during local validation and were not fatal:
+
+- Deprecated `G4OpticalPhysics` warning messages.
+- Duplicate process registration warnings from the physics list.
+- A small geometry overlap warning for `airGapPanel_physic`.
+
+They should still be reviewed before production studies, but they do not prevent
+the Qt visual check from opening and drawing the detector.
+
+## 9. Troubleshooting
+
+If `/vis/open OGLSQt ...` says it is not compatible with the chosen session, the
+program was started with a terminal UI session instead of a Qt UI session. The
+local fix is in `Bench.cc`: interactive mode uses:
+
+```cpp
+G4UIExecutive * session = new G4UIExecutive(argc, argv, "qt");
+```
+
+If CMake fails inside `Geant4PackageCache.cmake` with
+`geant4_set_and_check_package_variable Macro invoked with incorrect arguments`,
+check the Geant4 package cache in the Qt install. On this machine the generated
+`EXPAT_LIBRARY` entry needed to point to:
+
+```text
+/opt/miniconda3/envs/milliqan-sim/lib/libexpat.dylib
+```
+
+If only X11 OpenGL drivers appear, make sure the Qt Geant4 install has been
+sourced and the project was rebuilt after clearing `build/CMakeCache.txt` and
+`build/CMakeFiles`.
