@@ -21,6 +21,8 @@ import ROOT
 import sys
 import math
 from pathlib import Path
+import random
+
 
 # Function to convert sim copy number to data copy number for Scint
 def slabSimToDataScint(simChannel):
@@ -164,10 +166,15 @@ def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, p
     # Populate the vectors with flattened data
     for j in range(input_tree.PMTHits.size()):
         hit = input_tree.PMTHits.at(j)
-
+        #need to do per  PMT correction
+        #if hit.GetPMTNumber() == 19: simToDataScale = 2.58/11
+        #elif hit.GetPMTNumber() == 18: simToDataScale = 1.5/11 
         simToDataScale = 0.682*0.5 #using average PMT scale factor to calibrate to data. this is a float, so can be recalibrated easily
         # we don't need to scale the NPE since PMTs are already scaled in the simulation
-        temp_nPE[hit.GetPMTNumber()] = temp_nPE[hit.GetPMTNumber()] + simToDataScale
+            #temp_nPE[hit.GetPMTNumber()] = temp_nPE[hit.GetPMTNumber()] + simToDataScale #don't use the scale factor here, use the random number instead
+        if(random.random() < simToDataScale):
+            temp_nPE[hit.GetPMTNumber()] = temp_nPE[hit.GetPMTNumber()] + 1
+            
         # if the hit time in the channel is lower than the current time, replace the current time with the new time
         if(temp_time[hit.GetPMTNumber()] == 0 or hit.GetFirstHitTime() < temp_time[hit.GetPMTNumber()]):
             temp_time[hit.GetPMTNumber()] = hit.GetFirstHitTime()
@@ -179,7 +186,7 @@ def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, p
             pmt_nPE.push_back(temp_nPE[j])
             pmt_time.push_back(temp_time[j])
             dataChan = slabSimToDataPMT(j)
-            pmt_copyNo.push_back(int(dataChan))
+            pmt_copyNo.push_back(j)#j is pmt copy number. dataChan is the scintillator number
             pmt_layer.push_back(int(dataChan/12))
             pmt_row.push_back(int(dataChan%4)+1)
             pmt_column.push_back(int((dataChan%12)/4)+1)
