@@ -4,6 +4,15 @@
 
 ###########                                         9/8/23, R.Schmitz                                                   #############
 
+
+
+
+########### modified 6/6/2026, Collin Zheng #############
+########### modified the shared library path to be able to run on the mac #############
+########### On macOS/CMake, your build is now creating the shared library as libMilliQanCore.dylib, so we need to use that path #############
+
+
+
 #####################################################################################################################################
 
 ###### Designed to be run over EDep-only data, minimal outputs ######
@@ -11,6 +20,7 @@
 import ROOT
 import sys
 import math
+from pathlib import Path
 
 # Function to convert sim copy number to data copy number for Scint
 def slabSimToDataScint(simChannel):
@@ -178,14 +188,33 @@ def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, p
 ##################################################################################################################
 # Main script
 # Load the custom dictionary
-if ROOT.gSystem.Load("/net/cms26/cms26r0/zheng/slabsim/withPhoton/milliQanSim/build/libMilliQanCore.so") < 0:
-#if ROOT.gSystem.Load("libMilliQanCore.so") < 0:
-    raise Exception("Failed to load custom dictionary.")
+script_dir = Path(__file__).resolve().parent
+repo_dir = script_dir.parent
+library_candidates = [
+    repo_dir / "build" / "libBenchCore.dylib",
+    repo_dir / "build" / "libMilliQanCore.dylib",
+    repo_dir / "build" / "libBenchCore.so",
+    repo_dir / "build" / "libMilliQanCore.so",
+]
+
+loaded_dictionary = None
+for library_path in library_candidates:
+    if library_path.exists() and ROOT.gSystem.Load(str(library_path)) >= 0:
+        loaded_dictionary = library_path
+        break
+
+if loaded_dictionary is None:
+    tried = "\n  ".join(str(path) for path in library_candidates)
+    raise Exception("Failed to load custom dictionary. Tried:\n  " + tried)
 
 # Open the input ROOT file specified in the first argument
 #filename = "/net/cms26/cms26r0/zheng/barSimulation/barWithPhotonUpdate/BARcosmic" + sys.argv[1] + "/MilliQan.root"
-filename = sys.argv[1] + sys.argv[2] + "/MilliQan.root"
-outname = "output_" + sys.argv[2] + ".root"
+#filename = sys.argv[1] + sys.argv[2] + "/MilliQan.root"
+#outname = "output_" + sys.argv[2] + ".root"
+filename = "/Users/haoliangzheng/Desktop/CERN/milliQanSim/build/1MCd109center.root"
+outname = "1MCd109center_flat.root"
+
+
 #filename = "MilliQan.root"
 #outname = "MilliQan_flat.root"
 
