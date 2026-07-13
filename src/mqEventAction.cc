@@ -25,7 +25,7 @@
 
 //_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
 mqEventAction::mqEventAction(mqHistoManager* histo, G4int eventOffset, G4double eventWeight, G4int processID):
-  histoManager(histo),fEventOffset(eventOffset),saveThreshold(0),pmtCollID(-1), fEventWeight(eventWeight), fProcessID(processID),
+  histoManager(histo),fEventOffset(eventOffset),saveThreshold(0),pmtCollID(-1), fProcessID(processID),
   scintCollID(-1),verbose(0),pmtThreshold(1),forcedrawphotons(false),forcenophotons(false), pmtnb(0),
    storePMTHit(true),storeScintHit(true)
 {
@@ -62,9 +62,13 @@ mqEventAction::~mqEventAction(){
 //_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
 void mqEventAction::BeginOfEventAction(const G4Event* anEvent){
 
-  //New event, add the user information object
-  G4EventManager::
-    GetEventManager()->SetUserInformation(new mqUserEventInformation);
+	
+mqUserEventInformation* eventInformation = 
+    (mqUserEventInformation*)anEvent->GetUserInformation();
+if (!eventInformation) {
+    eventInformation = new mqUserEventInformation();
+    G4EventManager::GetEventManager()->SetUserInformation(eventInformation);
+}
 
   // Find the sensitive detectors by name
   G4SDManager* SDman = G4SDManager::GetSDMpointer();
@@ -92,9 +96,8 @@ G4int eventID = -1;
 	}
 
 	// get User event information and reset it as it is the beginning of the event
-	mqUserEventInformation* eventInformation
-      =(mqUserEventInformation*)anEvent->GetUserInformation();
 
+        G4double tempW = eventInformation->GetEventWeight();
 	eventInformation->Reset();
 	eventInformation->SetEventID(eventID);
 	eventInformation->SetPhotonLastTrackID(-1);
@@ -103,7 +106,7 @@ G4int eventID = -1;
 	eventInformation->SetMuonLastTrackID(-1);
 	eventInformation->SetElectronLastTrackID(-1);
 	eventInformation->SetMCPLastTrackID(-1);
-	eventInformation->SetEventWeight(fEventWeight);
+	eventInformation->SetEventWeight(tempW);
 	eventInformation->SetProcessID(fProcessID);
 	// get event weight and assign it
 //	eventInformation->SetEventWeight(eventWeight[eventID+fEventOffset]);

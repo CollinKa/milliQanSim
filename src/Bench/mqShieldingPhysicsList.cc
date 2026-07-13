@@ -73,14 +73,13 @@
 
 #include "G4DecayPhysics.hh"
 #include "G4RadioactiveDecayPhysics.hh"
-#include "G4EmProcessOptions.hh"
+//#include "G4EmProcessOptions.hh"  OLD G4.9
+#include "G4EmParameters.hh"
 #include "G4EmStandardPhysics_option4.hh"
 #include "G4EmExtraPhysics.hh"
 #include "G4IonQMDPhysics.hh"
 #include "G4IonElasticPhysics.hh"
 #include "G4StoppingPhysics.hh"
-#include "G4HadronPhysicsNuBeam.hh"
-#include "G4HadronElasticPhysics.hh"
 #include "G4HadronElasticPhysicsHP.hh"
 #include "G4HadronElasticPhysicsLEND.hh"
 #include "G4EmCalculator.hh"
@@ -89,10 +88,10 @@
 #include "G4MuonPlus.hh"
 #include "G4Material.hh"
 
-//#include "G4DataQuestionaire.hh"
 #include "G4HadronPhysicsShielding.hh"
 
 #include "G4OpticalPhysics.hh"
+#include "G4OpticalParameters.hh"  //New to G4p11
 //#include "G4OpticalProcessIndex.hh"
 
 
@@ -102,7 +101,6 @@ mqShieldingList::mqShieldingList( G4int verbose, G4String LEN_model, const boost
 {
   // default cut value  (1.0mm)
   // defaultCutValue = 1.0*CLHEP::mm;
-//  G4DataQuestionaire it(photon, neutron, radioactive);
   G4cout << "<<< Geant4 Physics List simulation engine: Shielding 2.1"<<G4endl;
   G4cout <<G4endl;
   this->defaultCutValue = 0.7*CLHEP::mm; //used 0.01mm in smallStep run
@@ -120,14 +118,6 @@ mqShieldingList::mqShieldingList( G4int verbose, G4String LEN_model, const boost
 
   // EM Physics
   this->RegisterPhysics( new G4EmStandardPhysics_option4(verbose));
-
-  // Hadron Elastic scattering
-      this->RegisterPhysics( new G4HadronElasticPhysics(verbose) );
-    
-//      // Hadron Physics+Neutrino
-//      this->RegisterPhysics(  new G4HadronPhysicsNuBeam(verbose));
-
- 
   //G4EmProcessOptions emOptions;
   //emOptions.SetFluo(true); // To activate deexcitation processes and fluorescence
   //emOptions.SetAuger(true); // To activate Auger effect if deexcitation is activated
@@ -140,7 +130,7 @@ mqShieldingList::mqShieldingList( G4int verbose, G4String LEN_model, const boost
   this->RegisterPhysics( new G4DecayPhysics(verbose) );
   //if ( rad == true ) this->RegisterPhysics( new G4RadioactiveDecayPhysics(verbose) );
   this->RegisterPhysics( new G4RadioactiveDecayPhysics(verbose) );
-  /*
+//  /*
   size_t find = LEN_model.find("LEND__");
   G4String evaluation;
   if ( find != G4String::npos )
@@ -158,7 +148,6 @@ mqShieldingList::mqShieldingList( G4int verbose, G4String LEN_model, const boost
   else if ( LEN_model == "LEND" )
   {
      this->RegisterPhysics( new G4HadronElasticPhysicsLEND(verbose,evaluation) );
-     G4DataQuestionaire itt(lend);
   }
   else
   {
@@ -192,7 +181,7 @@ mqShieldingList::mqShieldingList( G4int verbose, G4String LEN_model, const boost
      char env_ff[]="G4NEUTRONHP_PRODUCE_FISSION_FRAGMENTS=1";
      putenv(env_ff);
   }
-*/
+//*/
   // Stopping Physics
   this->RegisterPhysics( new G4StoppingPhysics(verbose) );
 
@@ -205,19 +194,23 @@ mqShieldingList::mqShieldingList( G4int verbose, G4String LEN_model, const boost
   // this->RegisterPhysics( new G4NeutronTrackingCut(verbose));
 
   // G.H.
-  //optical physics added manually to shielding list
+  //optical physics added manually to shielding list, comment/uncomment to turn on/off photon tracks
 ///*
   G4OpticalPhysics* opticalPhysics = new G4OpticalPhysics();
+  auto opticalParams = G4OpticalParameters::Instance();
 
 
-   opticalPhysics->SetScintillationYieldFactor(1.0);
+   //opticalPhysics->SetScintillationYieldFactor(1.0);  OLD 
+   //opticalParams->SetScintillationYieldFactor(1.0);
    //opticalPhysics->SetScintillationExcitationRatio(0.0);
 
    //opticalPhysics->SetMaxNumPhotonsPerStep(300);
    //opticalPhysics->SetMaxBetaChangePerStep(10.0);
 
-   opticalPhysics->SetTrackSecondariesFirst(kCerenkov,false);
-   opticalPhysics->SetTrackSecondariesFirst(kScintillation,false);
+   //opticalPhysics->SetTrackSecondariesFirst(kCerenkov,false); OLD
+   opticalParams->SetCerenkovTrackSecondariesFirst(false);
+   //opticalPhysics->SetTrackSecondariesFirst(kScintillation,false); OLD
+   opticalParams->SetScintTrackSecondariesFirst(false);
 
 
    this->RegisterPhysics( opticalPhysics );

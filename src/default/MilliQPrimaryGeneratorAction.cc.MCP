@@ -296,8 +296,8 @@ void MilliQPrimaryGeneratorAction::GetLHEFourVectors() {
     iss.clear();
     iss.str(line);
 
-//    if (!(iss >> fq >> fm >> fx >> fy >> fz >> fpx >> fpy >> fpz >> fw))
-      if (!(iss >> evt >> pid >> fq >> fm >> fx >> fy >> fz >> fpx >> fpy >> fpz >> fw))
+    if (!(iss >> fq >> fm >> fx >> fy >> fz >> fpx >> fpy >> fpz >> fw))
+//      if (!(iss >> evt >> pid >> fq >> fm >> fx >> fy >> fz >> fpx >> fpy >> fpz >> fw))
       break;
   
 //pencil beam

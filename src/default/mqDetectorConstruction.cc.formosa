@@ -121,7 +121,7 @@ G4VPhysicalVolume* mqDetectorConstruction::SetupGeometry() {
 				"G4_AIR");
 
 	const G4int nEntriesAir = 2;
-	G4double photonEnergyAir[nEntriesAir]={ 6.3 * eV,1.5 * eV};
+	G4double photonEnergyAir[nEntriesAir]={1.5 * eV,6.3 * eV};  //{ 6.3 * eV,1.5 * eV};
 	G4double Air_RIND[nEntriesAir];
 
 	for (int i = 0; i < nEntriesAir; i++) {
@@ -2208,6 +2208,19 @@ void mqDetectorConstruction::SetMagField(G4double fieldValueX, G4double fieldVal
 
 }
 
+//Needed for sorting spectra
+void SortProperty(G4double* energies, G4double* values, int n) {
+    std::vector<std::pair<G4double,G4double>> pairs;
+    for(int i=0; i<n; i++) pairs.emplace_back(energies[i], values[i]);
+    std::sort(pairs.begin(), pairs.end(),
+              [](auto &a, auto &b){ return a.first < b.first; });
+    for(int i=0; i<n; i++) {
+        energies[i] = pairs[i].first;
+        values[i]   = pairs[i].second;
+    }
+}
+
+
 G4MaterialPropertiesTable* mqDetectorConstruction::SetOpticalPropertiesOfPS(){
 
 
@@ -2241,6 +2254,9 @@ G4MaterialPropertiesTable* mptPlScin = new G4MaterialPropertiesTable();
 	else
 	G4cout << "Error opening file: " << "EJ200ScintSpectrum.txt" << G4endl;
 	ReadEJ200.close();
+	//std::reverse(photonEnergy, photonEnergy+nEntries); //Must reverse to put in ascending order. G4p11
+	//std::reverse(EJ200_SCINT, EJ200_SCINT + nEntries); //Must reverse to put in ascending order. G4p11
+	SortProperty(photonEnergy, EJ200_SCINT, ScintEntry);
 
 
 	for (int i = 0; i < nEntries; i++) {
@@ -2249,8 +2265,10 @@ G4MaterialPropertiesTable* mptPlScin = new G4MaterialPropertiesTable();
 		EJ200_ABSL[i] = 3.8*m;//2.5 * m; // bulk attenuation at 425 nm
 	}
 
-	mptPlScin->AddProperty("FASTCOMPONENT", photonEnergy, EJ200_SCINT,
-			nEntries);//->SetSpline(true);
+	//mptPlScin->AddProperty("FASTCOMPONENT", photonEnergy, EJ200_SCINT,   //OLD, FASTCOMPONENT obsolete
+	//		ScintEntry);//->SetSpline(true);
+	mptPlScin->AddProperty("SCINTILLATIONCOMPONENT1", photonEnergy, EJ200_SCINT,
+			ScintEntry);//->SetSpline(true);
 
 
 	mptPlScin->AddProperty("ABSLENGTH", photonEnergy, EJ200_ABSL,
@@ -2258,7 +2276,8 @@ G4MaterialPropertiesTable* mptPlScin = new G4MaterialPropertiesTable();
 
 	mptPlScin->AddConstProperty("SCINTILLATIONYIELD", 10000. / MeV); //--- according to EJ200
 	mptPlScin->AddConstProperty("RESOLUTIONSCALE", 1.0);
-	mptPlScin->AddConstProperty("FASTTIMECONSTANT", 2.1 * ns); //decay time, according to EJ200
+	//mptPlScin->AddConstProperty("FASTTIMECONSTANT", 2.1 * ns); //decay time, according to EJ200  //FASTTIMECONSTANT obsolete
+	mptPlScin->AddConstProperty("SCINTILLATIONTIMECONSTANT1", 2.1 * ns); //decay time, according to EJ200
 	mptPlScin->AddProperty("RINDEX", photonEnergy, EJ200_RIND, nEntries);//->SetSpline(true);
 
 return mptPlScin;
@@ -2297,6 +2316,9 @@ G4MaterialPropertiesTable* mqDetectorConstruction::SetOpticalPropertiesOfPMT(){
 	else
 	G4cout << "Error opening file: " << "PMT_R878_QE.txt" << G4endl;
 	ReadPMTQEff.close();
+	//std::reverse(photonEnergyPMT, photonEnergyPMT+nEntriesPMT); //Must reverse to put in ascending order. G4p11
+	//std::reverse(photocath_EFF, photocath_EFF + nEntriesPMT); //Must reverse to put in ascending order. G4p11
+	SortProperty(photonEnergyPMT, photocath_EFF, nEntriesPMT);
 /*	
 	G4double PhCath_REFL[nEntriesPMT] = { // to be determined
 			0., 0.,0.,0.,0.,0.,0.,0.,0.,0.,
