@@ -42,7 +42,7 @@
 #include "TSystem.h"
 //R__LOAD_LIBRARY(/homes/tianjiad/milliQanSim/build/libBenchCore.so)
 //R__LOAD_LIBRARY(/net/cms26/cms26r0/zheng/barsim/milliQanSim/build/libMilliQanCore.so)
-R__LOAD_LIBRARY(../include/libMilliQanCore.so)
+R__LOAD_LIBRARY(../build/libMilliQanCore.dylib)
 //R__LOAD_LIBRARY(../include/libMilliQanCore.so)
 
 using namespace std;
@@ -97,7 +97,10 @@ int slabSimToDataPMT(int simChannel) {
 
 
 
-void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile) {
+void waveinject_slab(
+    TString inputFile = "../build/beamMuonSlab_1kEvent.root",
+    TString outputFile = "beamMuonSlab_1kEvent_waveinjected.root",
+    TString waveformFile = "modified_waveform.root") {
 
     std::cout << "Injecting file " << inputFile << std::endl;
     std::cout << "Outputting file " << outputFile << std::endl;
@@ -138,11 +141,8 @@ void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile
     //might need to fix the calibration array for the slab
     //unlike bars PMT calibration, there are 4 slab PMT connections per slab scintillator, I don't know how to handle this yet.
     //Current solution is to make this all be 11.0 and matching the number of PMT from slab simulation(TODO: fix this)
-    std::vector<double> cali = {9.7, 8.4, 5.0, 3.6, 8.2, 8.2, 6.8, 4.6, 8.7, 7.1, 6.4, 7.5, 8.7, 11.8, 9.7, 8.1,
-        8.6, 9.1, 6.4, 7.5, 9.8, 8.8, 11, 6.6, 8.6, 11, 7.3, 8.3, 2.6, 6.2, 7.0, 7.2,
-        8.7, 7.7, 6.8, 7.8, 8.8, 8.5, 3.5, 8.2, 7.6, 6.8, 9.5, 8.5, 6.3, 6.7, 7.6, 7.9,
-        9.0, 8.3, 8.3, 6.9, 6.0, 8.0, 5.5, 5.5, 6.6, 8.1, 8.4, 8.7, 9.2, 7.6, 5.9, 8.2};
-    for (auto& cal : cali) cal /= 11.0; // Divide each value by 11
+    std::vector<double> cali = {1.74, 1.72, 1.91, 2.10, 2.05,1.97, 2.13, 1.99, 2.22, 1.99,2.06, 1.86, 1.95, 2.06, 2.34,2.20, 2.03, 2.13, 2.09, 2.16,2.07, 2.01, 1.94, 2.00, 1.95,2.09, 2.30, 2.24, 2.19, 2.18,2.23, 1.83, 1.86, 2.45, 2.10,2.00, 2.20, 2.11, 1.74, 1.72,1.73, 2.22, 2.22, 2.23, 2.11,2.00, 2.16, 2.70, 1.88, 1.78,2.02, 2.16, 1.49, 1.71, 1.58,1.78, 1.63, 2.18, 2.07, 2.09,1.85, 2.13, 1.88, 2.00, 1.67,1.44, 1.80, 1.93, 1.76, 2.07,1.87, 1.88, 1.92, 1.95, 2.15,2.31, 1.91, 2.48, 1.67, 2.28,1.77, 1.83, 1.91, 1.42, 1.74,2.33, 2.05, 1.80, 1.74, 2.11,1.96, 1.93, 2.28, 1.91, 2.07,1.88};
+    for (auto& cal : cali) cal /= 10.00; // Divide each value by 10.0
 
     //max values for the slab digitizer pulse height investigation remains to be dealt with
     //change this to 96 entries of 1250(TODO: fix this)
@@ -164,7 +164,7 @@ void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile
     };
 
     //Using Dariush's study from https://docs.google.com/presentation/d/1HEDyquZmwJO6FHQtmqME4q2W1po3xwkPLokhCiQpXkY/edit?slide=id.g34389da2a84_0_10#slide=id.g34389da2a84_0_10
-
+    /*
     std::vector<double> SPE_height = {
         //channel 0-15
         27.4, 53.9, 52.1, 39.3, 27.7, 47.7, 57.9, 29.5, 64.8, 69.7, 29.1, 48.0, 31.4, 47.6, 45.1, 47.8,
@@ -186,7 +186,11 @@ void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile
         28.1, 33.4, 30.4, 43.8, 54.4, 50.4, 73.9, 28.5, 47.7,38.8, 40.1, 37.8,31.9, 26.9, 56.1, 37.5
          
     };
-
+    */
+    //average summing amp SPE From Ryan's bench test
+    std::vector<double> SPE_height = {
+        65.5, 39, 38, 53.5, 33.5,65, 65, 37, 80.5, 72,63.5, 60.5, 55.5, 34, 69.5,57, 70.5, 67, 64.5, 35,47, 40, 45.5, 73.5, 47,59, 56, 45, 73.5, 52,68, 38.5, 66.5, 52, 41,47, 58, 56, 63.5, 59.5,68, 52, 69.5, 45.5, 66,53.5, 63, 54.5, 62.5, 59,45, 40, 65, 66.5, 56.5,54, 69.5, 58, 57.5, 60.5,52, 44.5, 36, 43.5, 45,35.5, 66, 53.5, 72, 49,36, 48.5, 33, 50, 64,41.5, 46, 53, 47, 39.5,52.5, 29, 49, 34.5, 63.5,58.5, 77, 47, 67.5, 45,47, 48.5, 38.5, 36, 46,78
+    };
     TRandom3 randGen(2004);
 
     Long64_t nentries = rootEvents.GetEntries();
@@ -249,9 +253,9 @@ void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile
          }
 */
          double initial_hit_time = hitTimes[0];
-	 //double calibration = (remappedPMT < 64) ? cali[remappedPMT] : 0.682; //orginal code from bar
-     double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
-	 if (hits.size() > 5000) {
+	 double calibration = cali[remappedPMT]; //SPE height for the slab PMT
+     //double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
+     if (hits.size() > 5000) {
             double areaSum = 0.0;
             for (size_t k = 0; k < hits.size(); ++k) {
                 if(randGen.Uniform() <= calibration) areaSum += fit->GetRandom();
@@ -261,7 +265,8 @@ void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile
             //new_waveform->Scale(areaSum * (1077.24 / 828.03) / new_waveform->Integral(480, 640));
             
 	    // Scale only the bins within [500, 660]
-            double scaleFactor = areaSum / (828.03) * (44.8573/59.0878); //sample area, then scale by the pulse height for SPEs in data
+            //double scaleFactor = areaSum / (828.03) * (44.8573/59.0878); //sample area, then scale by the pulse height for SPEs in data
+            double scaleFactor = areaSum / (828.03) * (SPE_height[remappedPMT] / 59.0878);
             for (int bin = 500; bin <= 660; ++bin) {
                 double binContent = new_waveform->GetBinContent(bin);
                 new_waveform->SetBinContent(bin, binContent * scaleFactor);
@@ -303,7 +308,8 @@ void waveinject_slab(TString inputFile, TString outputFile, TString waveformFile
                //new_waveform->Scale(event_area * (1077.24 / 828.03) / new_waveform->Integral(480, 640));
 	       
 	       // Scale only the bins within [500, 660]
-               double scaleFactor = event_area / (828.03) * (44.8573/59.0878);
+               //double scaleFactor = event_area / (828.03) * (44.8573/59.0878);
+               double scaleFactor = event_area  / (828.03) * (SPE_height[remappedPMT] / 59.0878);
                for (int bin = 500; bin <= 660; ++bin) {
                    double binContent = new_waveform->GetBinContent(bin);
                    new_waveform->SetBinContent(bin, binContent * scaleFactor);
