@@ -39,6 +39,8 @@
 #include "TRandom3.h"
 #include <vector>
 #include <map>
+#include <sstream>
+#include <string>
 #include "TSystem.h"
 //R__LOAD_LIBRARY(/homes/tianjiad/milliQanSim/build/libBenchCore.so)
 //R__LOAD_LIBRARY(/net/cms26/cms26r0/zheng/barsim/milliQanSim/build/libMilliQanCore.so)
@@ -100,11 +102,13 @@ int slabSimToDataPMT(int simChannel) {
 void waveinject_slab(
     TString inputFile = "../build/beamMuonSlab_1kEvent.root",
     TString outputFile = "beamMuonSlab_1kEvent_waveinjected.root",
-    TString waveformFile = "modified_waveform.root") {
+    TString waveformFile = "modified_waveform.root",
+    TString speMeansFile = "SPEmeans.txt") {
 
     std::cout << "Injecting file " << inputFile << std::endl;
     std::cout << "Outputting file " << outputFile << std::endl;
     std::cout << "Using waveform template " << waveformFile << std::endl;
+    std::cout << "Using SPE means file " << speMeansFile << std::endl;
 
     TChain rootEvents("Events");
     rootEvents.Add(inputFile);
@@ -114,9 +118,11 @@ void waveinject_slab(
 
     const int nDigitizers = 6;
     const int nChannelsPerDigitizer = 16;
+    const int nSPEChan = 96;
     const int nBins = 1024;
     double binWidth = 2.5;
     double rms_noise = 1;
+    const double nVsToPVs = 1e3;  // SPEmeans.txt is in nVs; sampling uses pVs
 
     Float_t waveform[nDigitizers][nChannelsPerDigitizer][nBins] = {{{0}}};
     Double_t eventWeight = -1;
@@ -125,13 +131,39 @@ void waveinject_slab(
     injectedTree->Branch("waveform", waveform, Form("waveform[%d][%d][%d]/F", nDigitizers, nChannelsPerDigitizer, nBins));
     injectedTree->Branch("eventWeight", &eventWeight, "eventWeight/D");
 
+    // Per-channel SPE area Gaussians from SPEmeans.txt (mean/sigma in nVs -> pVs)
+    std::vector<TF1*> fit(nSPEChan, nullptr);
+    {
+        std::ifstream in(speMeansFile.Data());
+        if (!in.is_open()) {
+            std::cerr << "Failed to open SPE means file: " << speMeansFile << std::endl;
+            return;
+        }
+        std::string line;
+        int nRead = 0;
+        while (std::getline(in, line)) {
+            if (line.empty()) continue;
+            if (line.find("chan") != std::string::npos && line.find("SPEmean") != std::string::npos) continue;
 
-    //might need to fix the the fit parameters for the slab?
-    TF1 *fit = new TF1("fit", "gaus(0)", 0, 5000);
-    fit->SetParameter(0, 7.23967e-02);
-    fit->SetParameter(1, 1.48539e+03);
-    fit->SetParameter(2, 2.90976e+02);
+            std::istringstream iss(line);
+            int chan = -1;
+            double mean = 0, meanErr = 0, sigma = 0, sigmaErr = 0;
+            if (!(iss >> chan >> mean >> meanErr >> sigma >> sigmaErr)) continue;
+            if (chan < 0 || chan >= nSPEChan) continue;
+            if (!(mean > 0.0 && sigma > 0.0)) continue;
 
+            fit[chan] = new TF1(Form("fit_chan%d", chan), "gaus(0)", 0, 5000);
+            fit[chan]->SetParameter(0, 1.0);
+            fit[chan]->SetParameter(1, mean * nVsToPVs);
+            fit[chan]->SetParameter(2, sigma * nVsToPVs);
+            ++nRead;
+        }
+        std::cout << "Loaded " << nRead << " channel SPE Gaussians from " << speMeansFile << std::endl;
+        if (nRead == 0) {
+            std::cerr << "No valid SPE means loaded; aborting." << std::endl;
+            return;
+        }
+    }
 
     //get the pulse SPE template
     TFile* f = new TFile(waveformFile);
@@ -196,8 +228,8 @@ void waveinject_slab(
     Long64_t nentries = rootEvents.GetEntries();
     std::cout << "Entries: " << nentries << std::endl;
 
-    //for (Long64_t i = 0; i < nentries; i++) {
-    for (Long64_t i = 0; i < 1000; i++) {
+    for (Long64_t i = 0; i < nentries; i++) {
+    //for (Long64_t i = 0; i < 1000; i++) {
         if (i % (nentries / 100) == 0) std::cout << "Processing Event " << i << "..." << std::endl;
         rootEvents.GetEntry(i);
         memset(waveform, 0, sizeof(waveform));
@@ -255,10 +287,11 @@ void waveinject_slab(
          double initial_hit_time = hitTimes[0];
 	 double calibration = cali[remappedPMT]; //SPE height for the slab PMT
      //double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
+     if (remappedPMT < 0 || remappedPMT >= nSPEChan || !fit[remappedPMT]) continue;
      if (hits.size() > 5000) {
             double areaSum = 0.0;
             for (size_t k = 0; k < hits.size(); ++k) {
-                if(randGen.Uniform() <= calibration) areaSum += fit->GetRandom();
+                if(randGen.Uniform() <= calibration) areaSum += fit[remappedPMT]->GetRandom();
             }
 
             TH1F* new_waveform = (TH1F*)pulse_shape->Clone();
@@ -303,7 +336,7 @@ void waveinject_slab(
                double initial_hit_time = PMTRHit->GetFirstHitTime();
 	       if(initial_hit_time>500) {continue;}
                TH1F* new_waveform = (TH1F*)pulse_shape->Clone();
-               double event_area = fit->GetRandom();
+               double event_area = fit[remappedPMT]->GetRandom();
 
                //new_waveform->Scale(event_area * (1077.24 / 828.03) / new_waveform->Integral(480, 640));
 	       
@@ -353,5 +386,9 @@ void waveinject_slab(
    injectedTree->Write();
    f->Close();
    outfile->Close();
+   for (int ch = 0; ch < nSPEChan; ++ch) {
+       delete fit[ch];
+       fit[ch] = nullptr;
+   }
 }
 
