@@ -177,7 +177,7 @@ void waveinject_slab(
     for (auto& cal : cali) cal /= 10.00; // Divide each value by 10.0
 
     //max values for the slab digitizer pulse height investigation remains to be dealt with
-    //change this to 96 entries of 1250(TODO: fix this)
+
     std::vector<double> maxValues = {
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
@@ -185,6 +185,7 @@ void waveinject_slab(
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1255, 1255, 1250,
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
+        1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250,
