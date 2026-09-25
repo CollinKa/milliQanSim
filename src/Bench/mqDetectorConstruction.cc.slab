@@ -204,9 +204,9 @@ G4VPhysicalVolume* mqDetectorConstruction::SetupGeometry() {
 	 G4double height_cath       = 2.0 * mm; //2mm
 	 G4double muMetalThickness = 0.5*mm;
 
-	 G4double ScintSlabX = 60/2*cm;
-	 G4double ScintSlabY = 40/2*cm;
-	 G4double ScintSlabZ = 5/2*cm;
+	 G4double ScintSlabX = 600/2*mm;
+	 G4double ScintSlabY = 400/2*mm;
+	 G4double ScintSlabZ = 50/2*mm;
 	 G4double ScintSlabWrapX = ScintSlabX+airGapThickness+wrapThickness;
 	 G4double ScintSlabWrapY = ScintSlabY+airGapThickness+wrapThickness;
 	 G4double ScintSlabWrapZ = ScintSlabZ+airGapThickness+wrapThickness;
