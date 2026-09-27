@@ -17,6 +17,7 @@
 
 ###### Designed to be run over EDep-only data, minimal outputs ######
 
+import argparse
 import ROOT
 import sys
 import math
@@ -24,7 +25,8 @@ from pathlib import Path
 import random
 
 
-SummingAmpSourceNPE = [1.74, 1.72, 1.91, 2.10, 2.05,1.97, 2.13, 1.99, 2.22, 1.99,2.06, 1.86, 1.95, 2.06, 2.34,2.20, 2.03, 2.13, 2.09, 2.16,2.07, 2.01, 1.94, 2.00, 1.95,2.09, 2.30, 2.24, 2.19, 2.18,2.23, 1.83, 1.86, 2.45, 2.10,2.00, 2.20, 2.11, 1.74, 1.72,1.73, 2.22, 2.22, 2.23, 2.11,2.00, 2.16, 2.70, 1.88, 1.78,2.02, 2.16, 1.49, 1.71, 1.58,1.78, 1.63, 2.18, 2.07, 2.09,1.85, 2.13, 1.88, 2.00, 1.67,1.44, 1.80, 1.93, 1.76, 2.07,1.87, 1.88, 1.92, 1.95, 2.15,2.31, 1.91, 2.48, 1.67, 2.28,1.77, 1.83, 1.91, 1.42, 1.74,2.33, 2.05, 1.80, 1.74, 2.11,1.96, 1.93, 2.28, 1.91, 2.07,1.88]/10.00
+# per-channel source nPE (not used below); element-wise /10 -- a list cannot be divided by a float
+SummingAmpSourceNPE = [x / 10.00 for x in [1.74, 1.72, 1.91, 2.10, 2.05,1.97, 2.13, 1.99, 2.22, 1.99,2.06, 1.86, 1.95, 2.06, 2.34,2.20, 2.03, 2.13, 2.09, 2.16,2.07, 2.01, 1.94, 2.00, 1.95,2.09, 2.30, 2.24, 2.19, 2.18,2.23, 1.83, 1.86, 2.45, 2.10,2.00, 2.20, 2.11, 1.74, 1.72,1.73, 2.22, 2.22, 2.23, 2.11,2.00, 2.16, 2.70, 1.88, 1.78,2.02, 2.16, 1.49, 1.71, 1.58,1.78, 1.63, 2.18, 2.07, 2.09,1.85, 2.13, 1.88, 2.00, 1.67,1.44, 1.80, 1.93, 1.76, 2.07,1.87, 1.88, 1.92, 1.95, 2.15,2.31, 1.91, 2.48, 1.67, 2.28,1.77, 1.83, 1.91, 1.42, 1.74,2.33, 2.05, 1.80, 1.74, 2.11,1.96, 1.93, 2.28, 1.91, 2.07,1.88]]
 
 
 # Function to convert sim copy number to data copy number for Scint
@@ -152,7 +154,7 @@ def populate_vectors_event(input_tree, eventID, runNumber):
     eventID.push_back(event.GetEventID())
     runNumber.push_back(1)
 
-def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, pmt_row, pmt_column, pmt_type):
+def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, pmt_row, pmt_column, pmt_type, qe):
     pmt_nPE.clear()
     pmt_copyNo.clear()
     pmt_time.clear()
@@ -173,7 +175,7 @@ def populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, p
         #if hit.GetPMTNumber() == 19: simToDataScale = 2.58/11
         #elif hit.GetPMTNumber() == 18: simToDataScale = 1.5/11 
         #simToDataScale = 0.682*0.5 #using average PMT scale factor to calibrate to data. this is a float, so can be recalibrated easily
-        simToDataScale = 1.0
+        simToDataScale = qe # QE rescale from --qe: each photon hit is kept with this probability
         # we don't need to scale the NPE since PMTs are already scaled in the simulation
             #temp_nPE[hit.GetPMTNumber()] = temp_nPE[hit.GetPMTNumber()] + simToDataScale #don't use the scale factor here, use the random number instead
         if(random.random() < simToDataScale):
@@ -241,6 +243,28 @@ def load_milliqan_dictionary(repo_dir):
         "Tried libraries:\n  " + tried
     )
 
+def qe_value(text):
+    qe = float(text)
+    if not 0 < qe <= 1:
+        raise argparse.ArgumentTypeError("--qe must be in (0, 1]: photon hits are kept with probability qe")
+    return qe
+
+parser = argparse.ArgumentParser(description="Flatten a MilliQan slab sim file into the lightweight data-like tree.")
+parser.add_argument("--input", required=True, help="Geant4 output file, e.g. build/Sim_<N>MilliQan.root")
+parser.add_argument("--output", help="flat output file (default: <input stem>_QE<qe>_flat.root next to the input)")
+parser.add_argument("--qe", type=qe_value, required=True, help="QE rescale applied to PMT photon hits; 1.0 keeps every hit")
+parser.add_argument("--seed", type=int, help="random seed for the QE thinning (default: unseeded)")
+args = parser.parse_args()
+
+if args.seed is not None:
+    random.seed(args.seed)
+
+input_path = Path(args.input).expanduser().resolve()
+if not input_path.exists():
+    sys.exit(f"input file not found: {input_path}")
+qe_tag = f"{args.qe:g}".replace(".", "p")
+output_path = Path(args.output).expanduser() if args.output else input_path.with_name(f"{input_path.stem}_QE{qe_tag}_flat.root")
+
 script_dir = Path(__file__).resolve().parent
 repo_dir = script_dir.parent
 loaded_dictionary = load_milliqan_dictionary(repo_dir)
@@ -249,8 +273,8 @@ loaded_dictionary = load_milliqan_dictionary(repo_dir)
 #filename = "/net/cms26/cms26r0/zheng/barSimulation/barWithPhotonUpdate/BARcosmic" + sys.argv[1] + "/MilliQan.root"
 #filename = sys.argv[1] + sys.argv[2] + "/MilliQan.root"
 #outname = "output_" + sys.argv[2] + ".root"
-filename = "/Users/haoliangzheng/Desktop/CERN/milliQanSim/build/1MCd109UpCenter.root"
-outname = "1MCd109UpCenter_QE1_flat.root"
+filename = str(input_path)
+outname = str(output_path)
 
 
 #filename = "MilliQan.root"
@@ -313,7 +337,7 @@ for i in range(n_entries):
     # Populate the vectors with flattened data
     populate_vectors_event(input_tree, eventID, runNumber)
     populate_vectors_scint(input_tree, scint_copyNo, scint_layer, scint_row, scint_column, scint_nPE, scint_time)
-    populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, pmt_row, pmt_column, pmt_type)
+    populate_vectors_pmt(input_tree, pmt_nPE, pmt_copyNo, pmt_time, pmt_layer, pmt_row, pmt_column, pmt_type, args.qe)
     
     # Fill the new tree with the flattened data
     output_tree.Fill()
@@ -322,4 +346,4 @@ for i in range(n_entries):
 output_file.Write()
 output_file.Close()
 
-#print("Finished file " + sys.argv[2])
+print(f"Wrote {n_entries} events to {outname} (QE = {args.qe:g})")
