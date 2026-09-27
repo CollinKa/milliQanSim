@@ -1800,8 +1800,7 @@ G4MaterialPropertiesTable* mptPlScin = new G4MaterialPropertiesTable();
 	G4cout << "mqOpticalFilePath is: " << mqOpticalFilePath << G4endl;
 	ReadEJ200.open(mqOpticalFilePath+"EJ200ScintSpectrum.txt");
 	if(ReadEJ200.is_open()){
-	while(!ReadEJ200.eof()){
-	ReadEJ200 >> pWavelength >> pSEff;
+	while(ScintEntry < nEntries && ReadEJ200 >> pWavelength >> pSEff){
 	pEnergy = (1240/pWavelength)*eV;
 	photonEnergy[ScintEntry] = pEnergy;
 	EJ200_SCINT[ScintEntry] = pSEff;
@@ -1860,8 +1859,7 @@ G4MaterialPropertiesTable* mqDetectorConstruction::SetOpticalPropertiesOfPMT(){
 	G4double pQEff;
 	ReadPMTQEff.open(mqOpticalFilePath+"PMT_R878_QE_orig.txt");
 	if(ReadPMTQEff.is_open()){
-	while(!ReadPMTQEff.eof()){
-	ReadPMTQEff >> pWavelength >> pQEff;
+	while(PMTEntry < nEntriesPMT && ReadPMTQEff >> pWavelength >> pQEff){
 	pQEff=1;
 	pEnergy = (1240/pWavelength)*eV;
 	photonEnergyPMT[PMTEntry] = pEnergy;
@@ -1904,7 +1902,7 @@ G4PhysicsVector mqDetectorConstruction::GetPMTEff_R878(){
 	if (effVec.GetVectorLength()!=0) G4cout << "Quantum Efficiency successfully retrieved for PMT_R878_QE" << G4endl;
 	else G4cout << "ERROR: Vector length is zero!" << G4endl;
 	effVec.ScaleVector(1,2); //multiplying by 2 for scaling purposes
-	return effVec;
+	return G4PhysicsVector(effVec);
 }
 
 G4PhysicsVector mqDetectorConstruction::GetPMTEff_R7725(){
@@ -1916,7 +1914,7 @@ G4PhysicsVector mqDetectorConstruction::GetPMTEff_R7725(){
 	if (effVec.GetVectorLength()!=0) G4cout << "Quantum Efficiency successfully retrieved for PMT R7725" << G4endl;
 	else G4cout << "ERROR: Vector length is zero!" << G4endl;
 	effVec.ScaleVector(1,2); //multiplying by 2 for scaling purposes
-	return effVec;
+	return G4PhysicsVector(effVec);
 }
 
 G4PhysicsVector mqDetectorConstruction::GetPMTEff_ET9814B(){
@@ -1927,7 +1925,7 @@ G4PhysicsVector mqDetectorConstruction::GetPMTEff_ET9814B(){
 	if (effVec.GetVectorLength()!=0) G4cout << "Quantum Efficiency successfully retrieved for PMT ET9814B" << G4endl;
 	else G4cout << "ERROR: Vector length is zero!" << G4endl;
 	effVec.ScaleVector(1,2); //multiplying by 2 for scaling purposes
-	return effVec;
+	return G4PhysicsVector(effVec);
 }
 
 void mqDetectorConstruction::UpdateGeometry() {
