@@ -93,6 +93,27 @@ int slabSimToDataPMT(int simChannel) {
     return slabSimToDataScint(simChannel + 18);
 }
 
+// Log-normal SPE template on the digitizer binning (1024 bins x 2.5 ns):
+// f(t) = U0 * exp(-0.5 * (ln((t-t0)/tau) / sigma)^2) + ped for t > t0, else ped.
+// U0, t0 and ped are fixed; only tau and sigma change per channel.
+// t0 = 1285 ns is where the old average_waveform (modified_waveform.root) rises
+// through 5% of its peak, so hit times shift the pulse exactly as before.
+const double kTemplateU0 = 50.0;    // mV
+const double kTemplateT0 = 1285.0;  // ns
+const double kTemplatePed = 0.0;    // mV
+
+TH1F* makeLogNormalTemplate(const char* name, double tau, double sigma) {
+    TH1F* h = new TH1F(name, name, 1024, 0, 2560);
+    h->SetDirectory(nullptr);
+    for (int bin = 1; bin <= h->GetNbinsX(); ++bin) {
+        double dt = h->GetBinCenter(bin) - kTemplateT0;
+        double value = kTemplatePed;
+        if (dt > 0) value += kTemplateU0 * std::exp(-0.5 * std::pow(std::log(dt / tau) / sigma, 2));
+        h->SetBinContent(bin, value);
+    }
+    return h;
+}
+
 
 
 
@@ -102,12 +123,12 @@ int slabSimToDataPMT(int simChannel) {
 void waveinject_slab(
     TString inputFile = "../build/beamMuonSlab_1kEvent.root",
     TString outputFile = "beamMuonSlab_1kEvent_waveinjected.root",
-    TString waveformFile = "modified_waveform.root",
+    TString lognormalFile = "SPElognormal.txt",
     TString speMeansFile = "SPEmeans.txt") {
 
     std::cout << "Injecting file " << inputFile << std::endl;
     std::cout << "Outputting file " << outputFile << std::endl;
-    std::cout << "Using waveform template " << waveformFile << std::endl;
+    std::cout << "Using log-normal SPE shapes " << lognormalFile << std::endl;
     std::cout << "Using SPE means file " << speMeansFile << std::endl;
 
     TChain rootEvents("Events");
@@ -165,9 +186,47 @@ void waveinject_slab(
         }
     }
 
-    //get the pulse SPE template
-    TFile* f = new TFile(waveformFile);
-    TH1F* pulse_shape = (TH1F*)f->Get("average_waveform");
+    // Per-channel log-normal SPE templates from SPElognormal.txt (tau in ns, sigma).
+    // Channel 8 has two PMTs with different tau: 8A (fast) and 8B (slow); row 8
+    // is its mean over both, used when the hits are summed (> 5000 hits).
+    std::vector<TH1F*> speTemplate(nSPEChan, nullptr);
+    TH1F* speTemplate8A = nullptr;
+    TH1F* speTemplate8B = nullptr;
+    {
+        std::ifstream in(lognormalFile.Data());
+        if (!in.is_open()) {
+            std::cerr << "Failed to open log-normal SPE file: " << lognormalFile << std::endl;
+            return;
+        }
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.empty() || line.find("chan") != std::string::npos) continue;
+
+            std::istringstream iss(line);
+            std::string label;
+            double tau = 0, tauErr = 0, sigma = 0;
+            if (!(iss >> label >> tau >> tauErr >> sigma)) continue;
+            
+
+            TH1F* h = makeLogNormalTemplate(Form("spe_template_%s", label.c_str()), tau, sigma);
+            if (label == "8A") speTemplate8A = h;
+            else if (label == "8B") speTemplate8B = h;
+            else {
+                int chan = std::stoi(label);
+                if (chan < 0 || chan >= nSPEChan) { delete h; continue; }
+                speTemplate[chan] = h;
+            }
+        }
+        int nMissing = 0;
+        for (int ch = 0; ch < nSPEChan; ++ch) if (!speTemplate[ch]) ++nMissing;
+        if (nMissing > 0 || !speTemplate8A || !speTemplate8B) {
+            std::cerr << "Log-normal SPE file is incomplete (" << nMissing
+                      << " channels missing, 8A/8B present: " << (speTemplate8A != nullptr)
+                      << "/" << (speTemplate8B != nullptr) << "); aborting." << std::endl;
+            return;
+        }
+        std::cout << "Built " << nSPEChan << " + 2 (8A, 8B) log-normal SPE templates" << std::endl;
+    }
 
     // Calibration array (scaled by dividing by 11)
     //might need to fix the calibration array for the slab
@@ -177,7 +236,7 @@ void waveinject_slab(
     for (auto& cal : cali) cal /= 10.00; // Divide each value by 10.0
 
     //max values for the slab digitizer pulse height investigation remains to be dealt with
-    //change this to 96 entries of 1250(TODO: fix this)
+
     std::vector<double> maxValues = {
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
@@ -185,6 +244,7 @@ void waveinject_slab(
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1255, 1255, 1250,
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250, 1250,
+        1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250,
         1250, 1250, 1250, 1250,
@@ -288,6 +348,13 @@ void waveinject_slab(
 	 double calibration = cali[remappedPMT]; //SPE height for the slab PMT
      //double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
      if (remappedPMT < 0 || remappedPMT >= nSPEChan || !fit[remappedPMT]) continue;
+     // Channel 8: sim PMT 34 -> fast tau (8A), 35 -> slow tau (8B). With > 5000
+     // hits both PMTs are equally likely, so the summed pulse uses the mean (row 8).
+     TH1F* pulse_shape = speTemplate[remappedPMT];
+     if (remappedPMT == 8 && hits.size() <= 5000) {
+         if (PMT_number == 34) pulse_shape = speTemplate8A;
+         else if (PMT_number == 35) pulse_shape = speTemplate8B;
+     }
      if (hits.size() > 5000) {
             double areaSum = 0.0;
             for (size_t k = 0; k < hits.size(); ++k) {
@@ -384,11 +451,14 @@ void waveinject_slab(
       cout << "final" << endl;
    outfile->cd();
    injectedTree->Write();
-   f->Close();
    outfile->Close();
    for (int ch = 0; ch < nSPEChan; ++ch) {
        delete fit[ch];
        fit[ch] = nullptr;
+       delete speTemplate[ch];
+       speTemplate[ch] = nullptr;
    }
+   delete speTemplate8A;
+   delete speTemplate8B;
 }
 
