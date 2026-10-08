@@ -228,6 +228,14 @@ void waveinject_slab(
         std::cout << "Built " << nSPEChan << " + 2 (8A, 8B) log-normal SPE templates" << std::endl;
     }
 
+    // Template area A per channel in pVs (mV x ns), over the whole record (bin 1
+    // to the last bin). scaleFactor = sampled area / A then gives the injected
+    // pulse the sampled SPE area. Channel 8 uses the mean-tau template (row 8)
+    // for 8A and 8B as well.
+    std::vector<double> templateArea(nSPEChan, 0.0);
+    for (int ch = 0; ch < nSPEChan; ++ch)
+        templateArea[ch] = speTemplate[ch]->Integral(1, speTemplate[ch]->GetNbinsX()) * binWidth;
+
     // Calibration array (scaled by dividing by 11)
     //might need to fix the calibration array for the slab
     //unlike bars PMT calibration, there are 4 slab PMT connections per slab scintillator, I don't know how to handle this yet.
@@ -366,7 +374,8 @@ void waveinject_slab(
             
 	    // Scale only the bins within [500, 660]
             //double scaleFactor = areaSum / (828.03) * (44.8573/59.0878); //sample area, then scale by the pulse height for SPEs in data
-            double scaleFactor = areaSum / (828.03) * (SPE_height[remappedPMT] / 59.0878);
+            //double scaleFactor = areaSum / (828.03) * (SPE_height[remappedPMT] / 59.0878);
+            double scaleFactor = areaSum / templateArea[remappedPMT];
             for (int bin = 500; bin <= 660; ++bin) {
                 double binContent = new_waveform->GetBinContent(bin);
                 new_waveform->SetBinContent(bin, binContent * scaleFactor);
@@ -409,7 +418,8 @@ void waveinject_slab(
 	       
 	       // Scale only the bins within [500, 660]
                //double scaleFactor = event_area / (828.03) * (44.8573/59.0878);
-               double scaleFactor = event_area  / (828.03) * (SPE_height[remappedPMT] / 59.0878);
+               //double scaleFactor = event_area  / (828.03) * (SPE_height[remappedPMT] / 59.0878);
+               double scaleFactor = event_area / templateArea[remappedPMT];
                for (int bin = 500; bin <= 660; ++bin) {
                    double binContent = new_waveform->GetBinContent(bin);
                    new_waveform->SetBinContent(bin, binContent * scaleFactor);
