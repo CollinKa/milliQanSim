@@ -173,7 +173,12 @@ void waveinject_slab(
             if (chan < 0 || chan >= nSPEChan) continue;
             if (!(mean > 0.0 && sigma > 0.0)) continue;
 
-            fit[chan] = new TF1(Form("fit_chan%d", chan), "gaus(0)", 0, 5000);
+            // TF1::GetRandom only samples inside the TF1 range. The old [0, 5000]
+            // came from the bars, whose SPE area is much smaller; the slab SPE
+            // areas are ~5 nVs (5000 pVs) and up to 14.4 nVs (channel 92), so
+            // 5000 cut off most of the distribution. 30000 pVs is >= mean + 3 sigma
+            // for every channel; keep it above that if SPEmeans.txt is redone.
+            fit[chan] = new TF1(Form("fit_chan%d", chan), "gaus(0)", 0, 30000);
             fit[chan]->SetParameter(0, 1.0);
             fit[chan]->SetParameter(1, mean * nVsToPVs);
             fit[chan]->SetParameter(2, sigma * nVsToPVs);
