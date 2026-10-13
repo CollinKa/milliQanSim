@@ -292,6 +292,54 @@ the data was fitted, and compare the fitted quantities with `allFits_v4.root`.
   - **U0 is about 9% low on average, worst on small-area channels.** See the
     height-gap item in "Not done yet".
 
+- **Area check: `compareSPEarea.C`.** This compares the SPE-only injection with
+  its own input, so v4 is not needed. The waveform area is the sum of all 1024
+  bins × 2.5 ns, for every injected pulse, with no selection.
+  - Run: `root -l -b -q 'compareSPEarea.C+("SPEonly_2kEvent_waveinjected.root","SPEmeans.txt","SPEareaCompare")'`.
+    It takes about 10 s.
+  - Output in `SPEareaCompare/`:
+    - `SPEarea_per_channel.pdf`: waveform area vs the input Gaussian
+      (`SPEmeans.txt` mean ± σ, not truncated)
+    - `SPEarea_diff_per_channel.pdf`: waveform − injected, per pulse
+    - `compareSPEarea_summary.csv`
+    - PNG previews for channels 0, 8 and 72
+
+    The pulse-by-pulse ratio was dropped: for tiny injected areas the 80 pVs
+    of noise makes it meaningless.
+  - **The injected areas follow the assigned Gaussian.** Their mean matches the
+    truncated-Gaussian mean to −0.02% on average, at most 2.4% (channel 74),
+    which is the statistics of 2000 draws.
+  - **The waveform area keeps 0.992 of the injected area on average**
+    (RMS 0.005 over the 95 channels other than 8). The loss is exactly the part
+    of the template beyond bin 660, which the injection zeroes. Channel 72 has
+    the longest τ (122 ns) and keeps 0.970, matching the 0.969 of its template
+    that lies inside bins 500–660.
+  - **The spread of waveform − injected is 82 pVs on average,** the
+    expected noise: sqrt(1024) × 1 mV × 2.5 ns = 80 pVs.
+  - **Channel 8 is off by design:** 8A keeps 0.84 of its injected area
+    (−738 pVs on average) and 8B 1.07 (+319 pVs), because both are scaled with
+    row 8's area A. The two together keep 0.955.
+
+- **SPE area sampling range: the group chose `[0, 30000]`.** That is what
+  `waveinject_slab.C` and `waveinject_slab_SPEonly.C` use. The alternative
+  `[mean − σ, mean + σ]` was tried with 2000 events and dropped. The test code
+  for it was not kept.
+
+  Value / input `SPEmeans.txt` value, over the 95 channels other than 8:
+
+  | range | injected mean | injected RMS | waveform mean | waveform RMS |
+  |---|---|---|---|---|
+  | `[0, 30000]` (chosen) | 1.022 (0.994–1.094) | 0.951 (0.854–0.993) | 1.014 | 0.945 |
+  | mean ± 1σ (dropped) | 1.000 (0.986–1.014) | 0.538 (0.523–0.555) | 0.992 | 0.537 |
+
+  - **`[0, 30000]`:** no negative areas. The mean is biased up by 2.2% on
+    average and up to 9.4% (channel 67), because the negative tail is cut, and
+    the RMS is 5% low on average.
+  - **mean ± 1σ:** the mean is exact and there are no negative areas, but the
+    RMS is only 0.54σ (as expected for a Gaussian truncated at ±1σ, 0.5396),
+    and the shape is flat-topped with hard edges. That would make summed
+    multi-PE areas about half as wide as they should be.
+
 ### Recreate the validation plots
 
 The output files are not committed. To regenerate them, run from
@@ -315,6 +363,9 @@ root -l -b -q 'compareSPEfits.C+("SPEonly_2kEvent_fits.root","/Users/haoliangzhe
 - `allFits_v4.root` is not in this repo. A local copy is in
   `~/Documents/Working on lxplux/spe_results/`, and the EOS copy is
   `/eos/user/h/hazheng/SlabSPEFits/allFits_v4.root`.
+- For the area check, run
+  `root -l -b -q 'compareSPEarea.C+("SPEonly_2kEvent_waveinjected.root","SPEmeans.txt","SPEareaCompare")'`
+  on the step 1 output (about 10 s).
 - Step 3 writes `SPEfitCompare/<param>_per_channel.pdf` for `U0`, `tau`,
   `sigma`, `peakHeight`, `fitRiseNs_ln` and `fitFallNs_ln`, one page per
   channel. It also writes `compareSPEfits.root` and `compareSPEfits_means.csv`.
