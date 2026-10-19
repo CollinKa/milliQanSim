@@ -161,10 +161,14 @@ void waveinject_slab(
 
     // Optional zero bias: a tree laid out like the output (waveform[6][16][1024]/F),
     // indexed by summing-amp channel = digitizer*16 + channel (same as remappedPMT).
-    // It is added once per summing-amp channel per event, after all PMT hits are
+    // It is applied once per summing-amp channel per event, after all PMT hits are
     // summed, so a channel fed by two PMTs still gets one zero-bias trace. The zero
     // bias carries the real noise, so the Gaussian rms_noise is turned off. The ZB
     // waveforms are the raw digitizer output; no baseline subtraction is done here.
+    // Sign: sim pulses here are positive, and the digitizer-format conversion
+    // (slabGlobalEventDemo.C) flips every sample to the negative slab-data polarity.
+    // So the ZB is SUBTRACTED here: after that flip the digitizer file holds
+    // (sim x -1) + raw ZB.
     TFile* zbFile = nullptr;
     TTree* zbTree = nullptr;
     std::vector<Float_t> zbWaveform(nDigitizers * nChannelsPerDigitizer * nBins, 0.f);
@@ -452,8 +456,8 @@ void waveinject_slab(
             }
         }
 
-        // Readout, once per summing-amp channel: signal + (zero bias or Gaussian noise),
-        // then clipping. Every channel gets it, hit or not.
+        // Readout, once per summing-amp channel: signal - zero bias (see the sign note
+        // above) or signal + Gaussian noise, then clipping. Every channel gets it, hit or not.
         if (useZeroBias) {
             // Event pairing: sim event i (entry i of the Geant4 "Events" tree) gets zero bias
             // entry i % N, N = number of ZB events. With N >= sim events this is a 1-to-1 match
@@ -469,7 +473,7 @@ void waveinject_slab(
             for (int bin = 0; bin < nBins; ++bin) {
                 double value = sig[bin];
                 if (windowCut[sumAmp] && (bin < 500 || bin > 660)) value = 0;
-                value += useZeroBias ? zb[bin] : randGen.Gaus(0, rms_noise);
+                value += useZeroBias ? -zb[bin] : randGen.Gaus(0, rms_noise);
                 if (value > maxValues[sumAmp]) value = maxValues[sumAmp];
                 if (value < -50) value = -50;
                 waveform[digitizer][channel][bin] = value;
