@@ -1,15 +1,3 @@
-//goal: Covert sim PMT number to digitizer channel number. Do I need to convert the sim channel number to offline channel number?
-//Jan 30, 2026, Collin Zheng
-//todo follow pmtPosition in flatlightwithphotonslab.py to get the front back pair in the offline summing amp channel.(done)
-//create the mapping function for scintillator number to offline channel number.(Slab number * 2 + type number) by comparing the SLAB number map, it matches tht trigger board number map in google sheet.(done)
-//create the pulse height scaling for each channel->            double scaleFactor = areaSum / (828.03) * (44.8573/59.0878); //sample area, then scale by the pulse height for SPEs in data
-//Need to fix the max_pulse_height for each channel.(no rush like calibration factor)
-//add Data for the SPE pulse height study: & fix scaling facor follow my slide, I don't understand what 45/55 is                double scaleFactor = event_area / (828.03) * (44.8573/59.0878) ;
-//priority check the chnnale maping by run the scrip
-//----------
-
-
-
 
 #include "TCanvas.h"
 #include "TTree.h"
@@ -125,7 +113,7 @@ void waveinject_slab(
     TString inputFile = "../build/beamMuonSlab_1kEvent.root",
     TString outputFile = "beamMuonSlab_1kEvent_waveinjected.root",
     TString lognormalFile = "SPElognormal.txt",
-    TString speMeansFile = "SPEmeans.txt",
+    TString speMeansFile = "SPEmeans.txt", //SPE pulse area measured by Dariush.
     TString zeroBiasFile = "",              // optional; ""  if there is no zero bias, adding Gaussian noise to channel with hit only
     TString zeroBiasTree = "ZBwaveform",
     TString zeroBiasBranch = "waveform") {
@@ -295,10 +283,7 @@ void waveinject_slab(
     std::cout << "Channel 8 template areas (pVs): 8 " << templateArea[8] << ", 8A " << templateArea8A
               << ", 8B " << templateArea8B << std::endl;
 
-    // Calibration array (scaled by dividing by 11)
-    //might need to fix the calibration array for the slab
-    //unlike bars PMT calibration, there are 4 slab PMT connections per slab scintillator, I don't know how to handle this yet.
-    //Current solution is to make this all be 11.0 and matching the number of PMT from slab simulation(TODO: fix this)
+
     std::vector<double> cali = {1.74, 1.72, 1.91, 2.10, 2.05,1.97, 2.13, 1.99, 2.22, 1.99,2.06, 1.86, 1.95, 2.06, 2.34,2.20, 2.03, 2.13, 2.09, 2.16,2.07, 2.01, 1.94, 2.00, 1.95,2.09, 2.30, 2.24, 2.19, 2.18,2.23, 1.83, 1.86, 2.45, 2.10,2.00, 2.20, 2.11, 1.74, 1.72,1.73, 2.22, 2.22, 2.23, 2.11,2.00, 2.16, 2.70, 1.88, 1.78,2.02, 2.16, 1.49, 1.71, 1.58,1.78, 1.63, 2.18, 2.07, 2.09,1.85, 2.13, 1.88, 2.00, 1.67,1.44, 1.80, 1.93, 1.76, 2.07,1.87, 1.88, 1.92, 1.95, 2.15,2.31, 1.91, 2.48, 1.67, 2.28,1.77, 1.83, 1.91, 1.42, 1.74,2.33, 2.05, 1.80, 1.74, 2.11,1.96, 1.93, 2.28, 1.91, 2.07,1.88};
     for (auto& cal : cali) cal /= 8.00; // Divide each value by 8.00
 
@@ -322,6 +307,7 @@ void waveinject_slab(
         1250, 1250, 1250, 1250,
     };
 
+    //So far the SPE waveform scale factor only depends on SPE area measuared by Dariush from SPEmeans.txt. So I am not going to use the SPE pulse height below unless there is objection.
     //Using Dariush's study from https://docs.google.com/presentation/d/1HEDyquZmwJO6FHQtmqME4q2W1po3xwkPLokhCiQpXkY/edit?slide=id.g34389da2a84_0_10#slide=id.g34389da2a84_0_10
     /*
     std::vector<double> SPE_height = {
@@ -345,11 +331,13 @@ void waveinject_slab(
         28.1, 33.4, 30.4, 43.8, 54.4, 50.4, 73.9, 28.5, 47.7,38.8, 40.1, 37.8,31.9, 26.9, 56.1, 37.5
          
     };
-    */
+    
     //average summing amp SPE From Ryan's bench test
     std::vector<double> SPE_height = {
         65.5, 39, 38, 53.5, 33.5,65, 65, 37, 80.5, 72,63.5, 60.5, 55.5, 34, 69.5,57, 70.5, 67, 64.5, 35,47, 40, 45.5, 73.5, 47,59, 56, 45, 73.5, 52,68, 38.5, 66.5, 52, 41,47, 58, 56, 63.5, 59.5,68, 52, 69.5, 45.5, 66,53.5, 63, 54.5, 62.5, 59,45, 40, 65, 66.5, 56.5,54, 69.5, 58, 57.5, 60.5,52, 44.5, 36, 43.5, 45,35.5, 66, 53.5, 72, 49,36, 48.5, 33, 50, 64,41.5, 46, 53, 47, 39.5,52.5, 29, 49, 34.5, 63.5,58.5, 77, 47, 67.5, 45,47, 48.5, 38.5, 36, 46,78
     };
+    */
+
     TRandom3 randGen(2004);
 
     Long64_t nentries = rootEvents.GetEntries();
