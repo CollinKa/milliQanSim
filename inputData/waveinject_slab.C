@@ -126,7 +126,7 @@ void waveinject_slab(
     TString outputFile = "beamMuonSlab_1kEvent_waveinjected.root",
     TString lognormalFile = "SPElognormal.txt",
     TString speMeansFile = "SPEmeans.txt",
-    TString zeroBiasFile = "",              // optional; "" = no zero bias, Gaussian noise only
+    TString zeroBiasFile = "",              // optional; ""  if there is no zero bias, adding Gaussian noise to channel with hit only
     TString zeroBiasTree = "ZBwaveform",
     TString zeroBiasBranch = "waveform") {
 
@@ -364,7 +364,7 @@ void waveinject_slab(
         return channelType + ScintChannel*2; //get the offline digitizer channel number
     };
 
-    // Adds one SPE-template pulse to dst (nBins samples): template bins [500, 660]
+    // Adds one SPE-template pulse to dst (nBins samples): template bins [500, 660](consider bin width 2.5ns)
     // scaled by area / templateArea0, shifted to start at hitTime, as before.
     auto addPulse = [&](double* dst, TH1F* shape, double area, double templateArea0, double hitTime) {
         double scaleFactor = area / templateArea0;
@@ -407,7 +407,7 @@ void waveinject_slab(
         }
 
         for (const auto& pair : pmtHitsMap) {
-            int remappedPMT = pair.first;
+            int remappedPMT = pair.first; //remappedPMT means the offline digitizer channel number
             const std::vector<mqPMTRHit*>& hits = pair.second;
             double* sig = &signal[(size_t)remappedPMT * nBins];
 
@@ -423,6 +423,7 @@ void waveinject_slab(
             double calibration = cali[remappedPMT]; //SPE height for the slab PMT
             //double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
 
+            //If the number of detected photons on two PMTs with same offline digitizer channel number is greater than 5000, then we used the scaled up single SPE waveform to replace the summ of SPE waveform.
             if (hits.size() > 5000) {
                 // One pulse with the summed SPE area of the accepted photons, at the
                 // earliest hit time. Channel 8: sim PMT 34 (fast, 8A) and 35 (slow, 8B)
@@ -431,7 +432,7 @@ void waveinject_slab(
                 for (size_t k = 0; k < hits.size(); ++k) {
                     if (randGen.Uniform() > calibration) continue;
                     double area = fit[remappedPMT]->GetRandom();
-                    int PMT_number = hits[k]->GetPMTNumber();
+                    int PMT_number = hits[k]->GetPMTNumber(); //PMT_number means the raw Geant4 PMT number
                     if (remappedPMT == 8 && PMT_number == 34) area8A += area;
                     else if (remappedPMT == 8 && PMT_number == 35) area8B += area;
                     else areaSum += area;
@@ -452,7 +453,7 @@ void waveinject_slab(
                     else if (remappedPMT == 8 && PMTRHit->GetPMTNumber() == 35) { pulse_shape = speTemplate8B; area0 = templateArea8B; }
                     addPulse(sig, pulse_shape, fit[remappedPMT]->GetRandom(), area0, hit_time);
                 }
-                windowCut[remappedPMT] = true;
+                windowCut[remappedPMT] = true; 
             }
         }
 
@@ -465,6 +466,7 @@ void waveinject_slab(
             // e.g. N = 300: sim 0, 300, 600 all get ZB 0 (a warning is printed after the loop).
             zbTree->GetEntry(i % nZBEntries);
         }
+        //sumAmp: offline digitizer channel number
         for (int sumAmp = 0; sumAmp < nSPEChan; ++sumAmp) {
             int digitizer = sumAmp / nChannelsPerDigitizer;
             int channel = sumAmp % nChannelsPerDigitizer;
@@ -472,10 +474,10 @@ void waveinject_slab(
             const Float_t* zb = &zbWaveform[(size_t)sumAmp * nBins];
             for (int bin = 0; bin < nBins; ++bin) {
                 double value = sig[bin];
-                if (windowCut[sumAmp] && (bin < 500 || bin > 660)) value = 0;
-                value += useZeroBias ? -zb[bin] : randGen.Gaus(0, rms_noise);
-                if (value > maxValues[sumAmp]) value = maxValues[sumAmp];
-                if (value < -50) value = -50;
+                if (windowCut[sumAmp] && (bin < 500 || bin > 660)) value = 0; //following recipe of 5000 hits or fewer from waveinject_v2.c in the process of adding noise.
+                value += useZeroBias ? -zb[bin] : randGen.Gaus(0, rms_noise); //zerobias waveformby default is negative. simulated signal waveform and noise are positive.
+                if (value > maxValues[sumAmp]) value = maxValues[sumAmp]; //cap the value at the max value
+                if (value < -50) value = -50; //cap the min value at -50
                 waveform[digitizer][channel][bin] = value;
             }
         }
