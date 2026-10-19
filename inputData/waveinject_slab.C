@@ -42,6 +42,7 @@
 #include <sstream>
 #include <string>
 #include "TSystem.h"
+#include "TLeaf.h"
 //R__LOAD_LIBRARY(/homes/tianjiad/milliQanSim/build/libBenchCore.so)
 //R__LOAD_LIBRARY(/net/cms26/cms26r0/zheng/barsim/milliQanSim/build/libMilliQanCore.so)
 R__LOAD_LIBRARY(../build/libMilliQanCore.dylib)
@@ -124,12 +125,18 @@ void waveinject_slab(
     TString inputFile = "../build/beamMuonSlab_1kEvent.root",
     TString outputFile = "beamMuonSlab_1kEvent_waveinjected.root",
     TString lognormalFile = "SPElognormal.txt",
-    TString speMeansFile = "SPEmeans.txt") {
+    TString speMeansFile = "SPEmeans.txt",
+    TString zeroBiasFile = "",              // optional; "" = no zero bias, Gaussian noise only
+    TString zeroBiasTree = "ZBwaveform",
+    TString zeroBiasBranch = "waveform") {
 
     std::cout << "Injecting file " << inputFile << std::endl;
     std::cout << "Outputting file " << outputFile << std::endl;
     std::cout << "Using log-normal SPE shapes " << lognormalFile << std::endl;
     std::cout << "Using SPE means file " << speMeansFile << std::endl;
+    const bool useZeroBias = (zeroBiasFile != "");
+    if (useZeroBias) std::cout << "Adding zero bias from " << zeroBiasFile << " (tree " << zeroBiasTree
+                               << ", branch " << zeroBiasBranch << ")" << std::endl;
 
     TChain rootEvents("Events");
     rootEvents.Add(inputFile);
@@ -151,6 +158,45 @@ void waveinject_slab(
     TTree* injectedTree = new TTree("Events", "Tree with digitizer waveform data");
     injectedTree->Branch("waveform", waveform, Form("waveform[%d][%d][%d]/F", nDigitizers, nChannelsPerDigitizer, nBins));
     injectedTree->Branch("eventWeight", &eventWeight, "eventWeight/D");
+
+    // Optional zero bias: a tree laid out like the output (waveform[6][16][1024]/F),
+    // indexed by summing-amp channel = digitizer*16 + channel (same as remappedPMT).
+    // It is added once per summing-amp channel per event, after all PMT hits are
+    // summed, so a channel fed by two PMTs still gets one zero-bias trace. The zero
+    // bias carries the real noise, so the Gaussian rms_noise is turned off. The ZB
+    // waveforms are the raw digitizer output; no baseline subtraction is done here.
+    TFile* zbFile = nullptr;
+    TTree* zbTree = nullptr;
+    std::vector<Float_t> zbWaveform(nDigitizers * nChannelsPerDigitizer * nBins, 0.f);
+    Long64_t nZBEntries = 0;
+    if (useZeroBias) {
+        zbFile = TFile::Open(zeroBiasFile, "READ");
+        if (!zbFile || zbFile->IsZombie()) {
+            std::cerr << "Failed to open zero bias file: " << zeroBiasFile << std::endl;
+            return;
+        }
+        zbTree = dynamic_cast<TTree*>(zbFile->Get(zeroBiasTree));
+        if (!zbTree) {
+            std::cerr << "No tree " << zeroBiasTree << " in " << zeroBiasFile << std::endl;
+            return;
+        }
+        TLeaf* zbLeaf = zbTree->GetLeaf(zeroBiasBranch);
+        if (!zbLeaf || TString(zbLeaf->GetTypeName()) != "Float_t" || zbLeaf->GetLen() != (Int_t)zbWaveform.size()) {
+            std::cerr << "Zero bias branch " << zeroBiasBranch << " must be Float_t["
+                      << nDigitizers << "][" << nChannelsPerDigitizer << "][" << nBins << "]" << std::endl;
+            return;
+        }
+        zbTree->SetBranchStatus("*", 0);
+        zbTree->SetBranchStatus(zeroBiasBranch, 1);
+        zbTree->SetBranchAddress(zeroBiasBranch, zbWaveform.data());
+        nZBEntries = zbTree->GetEntries();
+        if (nZBEntries == 0) {
+            std::cerr << "Zero bias tree is empty; aborting." << std::endl;
+            return;
+        }
+        rms_noise = 0;
+        std::cout << "Loaded " << nZBEntries << " zero bias events; Gaussian noise off" << std::endl;
+    }
 
     // Per-channel SPE area Gaussians from SPEmeans.txt (mean/sigma in nVs -> pVs)
     std::vector<TF1*> fit(nSPEChan, nullptr);
@@ -460,13 +506,36 @@ void waveinject_slab(
 
 	   }
       }
+
+      // Add zero bias to every summing-amp channel, hit or not; then the same clipping as above.
+      if (useZeroBias) {
+          // Event pairing: sim event i (entry i of the Geant4 "Events" tree) gets zero bias
+          // entry i % N, N = number of ZB events. With N >= sim events this is a 1-to-1 match
+          // (sim 0 <-> ZB 0, sim 1 <-> ZB 1, ...); with fewer ZB events it wraps around,
+          // e.g. N = 300: sim 0, 300, 600 all get ZB 0 (a warning is printed after the loop).
+          zbTree->GetEntry(i % nZBEntries);
+          for (int sumAmp = 0; sumAmp < nSPEChan; ++sumAmp) {
+              int digitizer = sumAmp / nChannelsPerDigitizer;
+              int channel = sumAmp % nChannelsPerDigitizer;
+              const Float_t* zb = &zbWaveform[(size_t)sumAmp * nBins];
+              for (int bin = 0; bin < nBins; ++bin) {
+                  waveform[digitizer][channel][bin] += zb[bin];
+                  if (waveform[digitizer][channel][bin] > maxValues[sumAmp]) waveform[digitizer][channel][bin] = maxValues[sumAmp];
+                  if (waveform[digitizer][channel][bin] < -50) waveform[digitizer][channel][bin] = -50;
+              }
+          }
+      }
       injectedTree->Fill();
    }
+   if (useZeroBias && nZBEntries < nentries)
+       std::cout << "Warning: " << nZBEntries << " zero bias events for " << nentries
+                 << " sim events; zero bias events were reused" << std::endl;
 
       cout << "final" << endl;
    outfile->cd();
    injectedTree->Write();
    outfile->Close();
+   if (zbFile) zbFile->Close();
    for (int ch = 0; ch < nSPEChan; ++ch) {
        delete fit[ch];
        fit[ch] = nullptr;
