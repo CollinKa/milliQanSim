@@ -281,11 +281,15 @@ void waveinject_slab(
 
     // Template area A per channel in pVs (mV x ns), over the whole record (bin 1
     // to the last bin). scaleFactor = sampled area / A then gives the injected
-    // pulse the sampled SPE area. Channel 8 uses the mean-tau template (row 8)
-    // for 8A and 8B as well.
+    // pulse the sampled SPE area. 8A and 8B use their own template areas, so a
+    // channel 8 pulse has the sampled area whichever PMT it came from.
     std::vector<double> templateArea(nSPEChan, 0.0);
     for (int ch = 0; ch < nSPEChan; ++ch)
         templateArea[ch] = speTemplate[ch]->Integral(1, speTemplate[ch]->GetNbinsX()) * binWidth;
+    const double templateArea8A = speTemplate8A->Integral(1, speTemplate8A->GetNbinsX()) * binWidth;
+    const double templateArea8B = speTemplate8B->Integral(1, speTemplate8B->GetNbinsX()) * binWidth;
+    std::cout << "Channel 8 template areas (pVs): 8 " << templateArea[8] << ", 8A " << templateArea8A
+              << ", 8B " << templateArea8B << std::endl;
 
     // Calibration array (scaled by dividing by 11)
     //might need to fix the calibration array for the slab
@@ -347,186 +351,136 @@ void waveinject_slab(
     Long64_t nentries = rootEvents.GetEntries();
     std::cout << "Entries: " << nentries << std::endl;
 
+    // Sim PMT number -> summing-amp channel (= offline digitizer channel number).
+    // Two sim PMTs (front 18/19 or back 20/21 of a slab) feed each summing amp.
+    auto simPMTToSumAmp = [](int PMT_number) {
+        //for validation: following the procedure from line 158-175 in the flatlightwithphotonslab.py
+        int ScintChannel = slabSimToDataPMT(PMT_number);  //get the scintillator number
+        int channelType = pmtPosition(PMT_number, int(ScintChannel/4) % 3, int(ScintChannel%4), int(ScintChannel/12)); //get the front back pair in the offline summing amp channel.
+        return channelType + ScintChannel*2; //get the offline digitizer channel number
+    };
+
+    // Adds one SPE-template pulse to dst (nBins samples): template bins [500, 660]
+    // scaled by area / templateArea0, shifted to start at hitTime, as before.
+    auto addPulse = [&](double* dst, TH1F* shape, double area, double templateArea0, double hitTime) {
+        double scaleFactor = area / templateArea0;
+        int integer_shift = static_cast<int>(hitTime / binWidth);
+        double fractional_shift = fmod(hitTime, binWidth) / binWidth;
+        auto scaled = [&](int bin) {
+            double c = shape->GetBinContent(bin);
+            return (bin >= 500 && bin <= 660) ? c * scaleFactor : c;
+        };
+        for (int bin = 0; bin < nBins; ++bin) {
+            int shifted_bin = bin - integer_shift;
+            if (shifted_bin >= nBins || shifted_bin < 1) continue;
+            dst[bin] += (1.0 - fractional_shift) * scaled(shifted_bin) + fractional_shift * scaled(shifted_bin - 1);
+        }
+    };
+
+    // Per-event signal per summing-amp channel, before noise / zero bias and clipping.
+    std::vector<double> signal((size_t)nSPEChan * nBins, 0.0);
+    std::vector<bool> hasSignal(nSPEChan, false);
+    std::vector<bool> windowCut(nSPEChan, false);  // per-photon path keeps only bins [500, 660]
+
     for (Long64_t i = 0; i < nentries; i++) {
     //for (Long64_t i = 0; i < 1000; i++) {
         if (i % (nentries / 100) == 0) std::cout << "Processing Event " << i << "..." << std::endl;
         rootEvents.GetEntry(i);
         memset(waveform, 0, sizeof(waveform));
+        std::fill(signal.begin(), signal.end(), 0.0);
+        std::fill(hasSignal.begin(), hasSignal.end(), false);
+        std::fill(windowCut.begin(), windowCut.end(), false);
         eventWeight = myROOTEvent->GetEventWeight();
 
-        // Map to group PMT hits by PMT number
+        // Group PMT hits by summing-amp channel, so both PMTs of a summing amp are
+        // handled together: the > 5000-hit choice uses their total hit count, and
+        // their pulses add instead of one PMT overwriting the other.
         std::map<int, std::vector<mqPMTRHit*>> pmtHitsMap;
 
         for (int j = 0; j < myROOTEvent->GetPMTRHits()->size(); j++) {
             mqPMTRHit* PMTRHit = myROOTEvent->GetPMTRHits()->at(j);
-            int PMT_number = PMTRHit->GetPMTNumber();
-            pmtHitsMap[PMT_number].push_back(PMTRHit);  //should I group the PMT that connects to the same Summing amp/digitizer together at here?yes assuming the gain are the same so far. But it may be difficult to consider case where the gains are difference.
+            int sumAmp = simPMTToSumAmp(PMTRHit->GetPMTNumber());
+            if (sumAmp < 0 || sumAmp >= nSPEChan || !fit[sumAmp]) continue;
+            pmtHitsMap[sumAmp].push_back(PMTRHit);
         }
-        
-       
+
         for (const auto& pair : pmtHitsMap) {
-            int PMT_number = pair.first;
+            int remappedPMT = pair.first;
             const std::vector<mqPMTRHit*>& hits = pair.second;
-        //for validation: following the procedure from line 158-175 in the flatlightwithphotonslab.py
-        //wish to covert sim PMT number offline channel number, then convert to digitizer channel number
-        int ScintChannel = slabSimToDataPMT(PMT_number);  //get the scintillator number
-        int channelType = pmtPosition(PMT_number, int(ScintChannel/4) % 3, int(ScintChannel%4), int(ScintChannel/12)); //get the front back pair in the offline summing amp channel.
-        int remappedPMT = channelType + ScintChannel*2; //get the offline digitizer channel number
-        int digitizer = remappedPMT / nChannelsPerDigitizer;  //digitizer number (raw)
-        int channel = remappedPMT % nChannelsPerDigitizer;  //digitizer channel number (raw)
-        //mapping debug
-        //cout << "raw PMT_number" << PMT_number << endl;
-        //cout << "ScintChannel" << ScintChannel << endl;
-        //cout << "channelType" << channelType << endl;
-        //cout << "remappedPMT" << remappedPMT << endl;
-        //cout << "digitizer" << digitizer << endl;
-        //cout << "digi channel" << channel << endl;  
-   
-        // Extract and sort hit times
-        std::vector<double> hitTimes;
-        for (const auto& hit : hits) {
-        if(hit->GetFirstHitTime() > 500.0 ) continue;
-    hitTimes.push_back(hit->GetFirstHitTime());
+            double* sig = &signal[(size_t)remappedPMT * nBins];
+
+            // Earliest hit time (<= 500 ns) over both PMTs
+            double initial_hit_time = -1;
+            for (const auto& hit : hits) {
+                double t = hit->GetFirstHitTime();
+                if (t > 500.0) continue;
+                if (initial_hit_time < 0 || t < initial_hit_time) initial_hit_time = t;
+            }
+            if (initial_hit_time < 0) continue;
+
+            double calibration = cali[remappedPMT]; //SPE height for the slab PMT
+            //double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
+
+            if (hits.size() > 5000) {
+                // One pulse with the summed SPE area of the accepted photons, at the
+                // earliest hit time. Channel 8: sim PMT 34 (fast, 8A) and 35 (slow, 8B)
+                // have different shapes, so each PMT's area goes on its own template.
+                double areaSum = 0.0, area8A = 0.0, area8B = 0.0;
+                for (size_t k = 0; k < hits.size(); ++k) {
+                    if (randGen.Uniform() > calibration) continue;
+                    double area = fit[remappedPMT]->GetRandom();
+                    int PMT_number = hits[k]->GetPMTNumber();
+                    if (remappedPMT == 8 && PMT_number == 34) area8A += area;
+                    else if (remappedPMT == 8 && PMT_number == 35) area8B += area;
+                    else areaSum += area;
+                }
+                if (areaSum > 0) addPulse(sig, speTemplate[remappedPMT], areaSum, templateArea[remappedPMT], initial_hit_time);
+                if (area8A > 0) addPulse(sig, speTemplate8A, area8A, templateArea8A, initial_hit_time);
+                if (area8B > 0) addPulse(sig, speTemplate8B, area8B, templateArea8B, initial_hit_time);
+            } else {
+                // One pulse per accepted photon at its own hit time; channel 8 uses the
+                // template of the PMT the photon hit.
+                for (mqPMTRHit* PMTRHit : hits) {
+                    if (randGen.Uniform() > calibration) continue;
+                    double hit_time = PMTRHit->GetFirstHitTime();
+                    if (hit_time > 500) continue;
+                    TH1F* pulse_shape = speTemplate[remappedPMT];
+                    double area0 = templateArea[remappedPMT];
+                    if (remappedPMT == 8 && PMTRHit->GetPMTNumber() == 34) { pulse_shape = speTemplate8A; area0 = templateArea8A; }
+                    else if (remappedPMT == 8 && PMTRHit->GetPMTNumber() == 35) { pulse_shape = speTemplate8B; area0 = templateArea8B; }
+                    addPulse(sig, pulse_shape, fit[remappedPMT]->GetRandom(), area0, hit_time);
+                }
+                windowCut[remappedPMT] = true;
+            }
+            hasSignal[remappedPMT] = true;
         }
 
-
-	 if(hitTimes.size()==0) continue;
-         std::sort(hitTimes.begin(), hitTimes.end());
-
-         // Calculate median hit time
-/*
-	 double median_hit_time;
-         size_t size = hitTimes.size();
-         if (size % 2 == 0) {
-            median_hit_time = 0.5 * (hitTimes[size / 2 - 1] + hitTimes[size / 2]);
-         } else {
-            median_hit_time = hitTimes[size / 2];
-         }
-*/
-         double initial_hit_time = hitTimes[0];
-	 double calibration = cali[remappedPMT]; //SPE height for the slab PMT
-     //double calibration = 0.682; //Temporary fix for the calibration factor, should be changed to the actual calibration factor later.
-     if (remappedPMT < 0 || remappedPMT >= nSPEChan || !fit[remappedPMT]) continue;
-     // Channel 8: sim PMT 34 -> fast tau (8A), 35 -> slow tau (8B). With > 5000
-     // hits both PMTs are equally likely, so the summed pulse uses the mean (row 8).
-     TH1F* pulse_shape = speTemplate[remappedPMT];
-     if (remappedPMT == 8 && hits.size() <= 5000) {
-         if (PMT_number == 34) pulse_shape = speTemplate8A;
-         else if (PMT_number == 35) pulse_shape = speTemplate8B;
-     }
-     if (hits.size() > 5000) {
-            double areaSum = 0.0;
-            for (size_t k = 0; k < hits.size(); ++k) {
-                if(randGen.Uniform() <= calibration) areaSum += fit[remappedPMT]->GetRandom();
-            }
-
-            TH1F* new_waveform = (TH1F*)pulse_shape->Clone();
-            //new_waveform->Scale(areaSum * (1077.24 / 828.03) / new_waveform->Integral(480, 640));
-            
-	    // Scale only the bins within [500, 660]
-            //double scaleFactor = areaSum / (828.03) * (44.8573/59.0878); //sample area, then scale by the pulse height for SPEs in data
-            //double scaleFactor = areaSum / (828.03) * (SPE_height[remappedPMT] / 59.0878);
-            double scaleFactor = areaSum / templateArea[remappedPMT];
-            for (int bin = 500; bin <= 660; ++bin) {
-                double binContent = new_waveform->GetBinContent(bin);
-                new_waveform->SetBinContent(bin, binContent * scaleFactor);
-            }
-
-	    int integer_shift = static_cast<int>(initial_hit_time / binWidth);
-            double fractional_shift = fmod(initial_hit_time, binWidth) / binWidth;
-
-	    //uses median time rather than first for large hits
-	    //int integer_shift = static_cast<int>(median_hit_time / binWidth);
-            //double fractional_shift = fmod(median_hit_time, binWidth) / binWidth;
-
-            for (int bin = 0; bin < nBins; ++bin) waveform[digitizer][channel][bin] = 0.0;
-
+        // Readout, once per summing-amp channel: signal + (zero bias or Gaussian noise),
+        // then clipping. Without zero bias, channels with no signal stay at 0.
+        if (useZeroBias) {
+            // Event pairing: sim event i (entry i of the Geant4 "Events" tree) gets zero bias
+            // entry i % N, N = number of ZB events. With N >= sim events this is a 1-to-1 match
+            // (sim 0 <-> ZB 0, sim 1 <-> ZB 1, ...); with fewer ZB events it wraps around,
+            // e.g. N = 300: sim 0, 300, 600 all get ZB 0 (a warning is printed after the loop).
+            zbTree->GetEntry(i % nZBEntries);
+        }
+        for (int sumAmp = 0; sumAmp < nSPEChan; ++sumAmp) {
+            if (!useZeroBias && !hasSignal[sumAmp]) continue;
+            int digitizer = sumAmp / nChannelsPerDigitizer;
+            int channel = sumAmp % nChannelsPerDigitizer;
+            const double* sig = &signal[(size_t)sumAmp * nBins];
+            const Float_t* zb = &zbWaveform[(size_t)sumAmp * nBins];
             for (int bin = 0; bin < nBins; ++bin) {
-                int shifted_bin = bin - integer_shift;
-                if (shifted_bin >= nBins || shifted_bin < 1) continue;
-
-                double value = (1.0 - fractional_shift) * new_waveform->GetBinContent(shifted_bin) +
-                               fractional_shift * new_waveform->GetBinContent(shifted_bin - 1);
-                double noise = randGen.Gaus(0, rms_noise);
-                waveform[digitizer][channel][bin] += (value + noise);
-
-                if (waveform[digitizer][channel][bin] > maxValues[remappedPMT]) waveform[digitizer][channel][bin] = maxValues[remappedPMT];
-                if (waveform[digitizer][channel][bin] < -50) waveform[digitizer][channel][bin] = -50;
+                double value = sig[bin];
+                if (windowCut[sumAmp] && (bin < 500 || bin > 660)) value = 0;
+                value += useZeroBias ? zb[bin] : randGen.Gaus(0, rms_noise);
+                if (value > maxValues[sumAmp]) value = maxValues[sumAmp];
+                if (value < -50) value = -50;
+                waveform[digitizer][channel][bin] = value;
             }
-
-            for (int bin = 0; bin < integer_shift; ++bin) waveform[digitizer][channel][bin] = 0.0;
-
-            delete new_waveform;
-         } else {
-            for (mqPMTRHit* PMTRHit : hits) {
-               if(randGen.Uniform() > calibration) continue;
-               double initial_hit_time = PMTRHit->GetFirstHitTime();
-	       if(initial_hit_time>500) {continue;}
-               TH1F* new_waveform = (TH1F*)pulse_shape->Clone();
-               double event_area = fit[remappedPMT]->GetRandom();
-
-               //new_waveform->Scale(event_area * (1077.24 / 828.03) / new_waveform->Integral(480, 640));
-	       
-	       // Scale only the bins within [500, 660]
-               //double scaleFactor = event_area / (828.03) * (44.8573/59.0878);
-               //double scaleFactor = event_area  / (828.03) * (SPE_height[remappedPMT] / 59.0878);
-               double scaleFactor = event_area / templateArea[remappedPMT];
-               for (int bin = 500; bin <= 660; ++bin) {
-                   double binContent = new_waveform->GetBinContent(bin);
-                   new_waveform->SetBinContent(bin, binContent * scaleFactor);
-               }
-
-               int integer_shift = static_cast<int>(initial_hit_time / binWidth);
-	       double fractional_shift = fmod(initial_hit_time, binWidth) / binWidth;
-
-               //for (int bin = 0; bin < nBins; ++bin) waveform[digitizer][channel][bin] = 0.0;
-
-               //for (int bin = 500; bin < 660; ++bin) {
-               for (int bin = 0; bin < nBins; ++bin) {
-                  int shifted_bin = bin - integer_shift;
-                  if (shifted_bin >= nBins || shifted_bin < 1) continue;
-
-                  double value = (1.0 - fractional_shift) * new_waveform->GetBinContent(shifted_bin) +
-                                 fractional_shift * new_waveform->GetBinContent(shifted_bin - 1);
-		  waveform[digitizer][channel][bin] += (value);
-
-               }
-
-               for (int bin = 0; bin < integer_shift; ++bin) waveform[digitizer][channel][bin] = 0.0;
-
-               delete new_waveform;
-            }
-                  for (int bin = 0; bin < nBins; bin++) {
-		        if(bin<500 || bin>660) waveform[digitizer][channel][bin]=0;
-                        double noise = randGen.Gaus(0, rms_noise);
-			waveform[digitizer][channel][bin] += noise;
-                  	if (waveform[digitizer][channel][bin] > maxValues[remappedPMT]) waveform[digitizer][channel][bin] = maxValues[remappedPMT];
-                  	if (waveform[digitizer][channel][bin] < -50) waveform[digitizer][channel][bin] = -50;
-		  }
-
-	   }
-      }
-
-      // Add zero bias to every summing-amp channel, hit or not; then the same clipping as above.
-      if (useZeroBias) {
-          // Event pairing: sim event i (entry i of the Geant4 "Events" tree) gets zero bias
-          // entry i % N, N = number of ZB events. With N >= sim events this is a 1-to-1 match
-          // (sim 0 <-> ZB 0, sim 1 <-> ZB 1, ...); with fewer ZB events it wraps around,
-          // e.g. N = 300: sim 0, 300, 600 all get ZB 0 (a warning is printed after the loop).
-          zbTree->GetEntry(i % nZBEntries);
-          for (int sumAmp = 0; sumAmp < nSPEChan; ++sumAmp) {
-              int digitizer = sumAmp / nChannelsPerDigitizer;
-              int channel = sumAmp % nChannelsPerDigitizer;
-              const Float_t* zb = &zbWaveform[(size_t)sumAmp * nBins];
-              for (int bin = 0; bin < nBins; ++bin) {
-                  waveform[digitizer][channel][bin] += zb[bin];
-                  if (waveform[digitizer][channel][bin] > maxValues[sumAmp]) waveform[digitizer][channel][bin] = maxValues[sumAmp];
-                  if (waveform[digitizer][channel][bin] < -50) waveform[digitizer][channel][bin] = -50;
-              }
-          }
-      }
-      injectedTree->Fill();
-   }
+        }
+        injectedTree->Fill();
+    }
    if (useZeroBias && nZBEntries < nentries)
        std::cout << "Warning: " << nZBEntries << " zero bias events for " << nentries
                  << " sim events; zero bias events were reused" << std::endl;
