@@ -379,7 +379,6 @@ void waveinject_slab(
 
     // Per-event signal per summing-amp channel, before noise / zero bias and clipping.
     std::vector<double> signal((size_t)nSPEChan * nBins, 0.0);
-    std::vector<bool> hasSignal(nSPEChan, false);
     std::vector<bool> windowCut(nSPEChan, false);  // per-photon path keeps only bins [500, 660]
 
     for (Long64_t i = 0; i < nentries; i++) {
@@ -388,7 +387,6 @@ void waveinject_slab(
         rootEvents.GetEntry(i);
         memset(waveform, 0, sizeof(waveform));
         std::fill(signal.begin(), signal.end(), 0.0);
-        std::fill(hasSignal.begin(), hasSignal.end(), false);
         std::fill(windowCut.begin(), windowCut.end(), false);
         eventWeight = myROOTEvent->GetEventWeight();
 
@@ -452,11 +450,10 @@ void waveinject_slab(
                 }
                 windowCut[remappedPMT] = true;
             }
-            hasSignal[remappedPMT] = true;
         }
 
         // Readout, once per summing-amp channel: signal + (zero bias or Gaussian noise),
-        // then clipping. Without zero bias, channels with no signal stay at 0.
+        // then clipping. Every channel gets it, hit or not.
         if (useZeroBias) {
             // Event pairing: sim event i (entry i of the Geant4 "Events" tree) gets zero bias
             // entry i % N, N = number of ZB events. With N >= sim events this is a 1-to-1 match
@@ -465,7 +462,6 @@ void waveinject_slab(
             zbTree->GetEntry(i % nZBEntries);
         }
         for (int sumAmp = 0; sumAmp < nSPEChan; ++sumAmp) {
-            if (!useZeroBias && !hasSignal[sumAmp]) continue;
             int digitizer = sumAmp / nChannelsPerDigitizer;
             int channel = sumAmp % nChannelsPerDigitizer;
             const double* sig = &signal[(size_t)sumAmp * nBins];
