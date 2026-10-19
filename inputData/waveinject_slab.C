@@ -300,7 +300,7 @@ void waveinject_slab(
     //unlike bars PMT calibration, there are 4 slab PMT connections per slab scintillator, I don't know how to handle this yet.
     //Current solution is to make this all be 11.0 and matching the number of PMT from slab simulation(TODO: fix this)
     std::vector<double> cali = {1.74, 1.72, 1.91, 2.10, 2.05,1.97, 2.13, 1.99, 2.22, 1.99,2.06, 1.86, 1.95, 2.06, 2.34,2.20, 2.03, 2.13, 2.09, 2.16,2.07, 2.01, 1.94, 2.00, 1.95,2.09, 2.30, 2.24, 2.19, 2.18,2.23, 1.83, 1.86, 2.45, 2.10,2.00, 2.20, 2.11, 1.74, 1.72,1.73, 2.22, 2.22, 2.23, 2.11,2.00, 2.16, 2.70, 1.88, 1.78,2.02, 2.16, 1.49, 1.71, 1.58,1.78, 1.63, 2.18, 2.07, 2.09,1.85, 2.13, 1.88, 2.00, 1.67,1.44, 1.80, 1.93, 1.76, 2.07,1.87, 1.88, 1.92, 1.95, 2.15,2.31, 1.91, 2.48, 1.67, 2.28,1.77, 1.83, 1.91, 1.42, 1.74,2.33, 2.05, 1.80, 1.74, 2.11,1.96, 1.93, 2.28, 1.91, 2.07,1.88};
-    for (auto& cal : cali) cal /= 10.00; // Divide each value by 10.0
+    for (auto& cal : cali) cal /= 8.00; // Divide each value by 8.00
 
     //max values for the slab digitizer pulse height investigation remains to be dealt with
 
